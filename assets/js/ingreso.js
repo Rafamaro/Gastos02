@@ -95,9 +95,12 @@ export function refreshCategorySelects(state){
   const cats = t==="income" ? config.incomeCategories : config.expenseCategories;
   fillSelect(el("fCategory"), cats.length ? cats : ["Otros"]);
 
-  // filtro usa unión
-  fillSelect(el("qCategory"), ["(Todas)", ...unionCategories(config)]);
-  el("qCategory").value = "(Todas)";
+  // filtro usa unión y conserva selección previa si sigue disponible
+  const qCategory = el("qCategory");
+  const previousFilter = qCategory.value;
+  const allCategories = ["(Todas)", ...unionCategories(config)];
+  fillSelect(qCategory, allCategories);
+  qCategory.value = allCategories.includes(previousFilter) ? previousFilter : "(Todas)";
 
   // edit depende del tipo actual de edición
   const et = el("eType").value || "expense";

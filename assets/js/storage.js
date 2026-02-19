@@ -39,7 +39,9 @@ export function loadConfig(){
       const parsed = JSON.parse(raw);
       return mergeConfig(parsed);
     }
-  }catch{}
+  }catch(err){
+    console.error("No se pudo leer configuración v2", err);
+  }
 
   // migration v1
   try{
@@ -56,7 +58,9 @@ export function loadConfig(){
       localStorage.setItem(LS.CFG, JSON.stringify(v2));
       return v2;
     }
-  }catch{}
+  }catch(err){
+    console.error("No se pudo migrar configuración v1", err);
+  }
 
   return structuredClone(defaults);
 }
@@ -73,7 +77,9 @@ export function loadTransactions(config){
       const parsed = JSON.parse(raw);
       return Array.isArray(parsed) ? parsed.map(x => normalizeTx(x, config)) : [];
     }
-  }catch{}
+  }catch(err){
+    console.error("No se pudieron leer movimientos v2", err);
+  }
 
   // migration v1 (solo gastos)
   try{
@@ -86,7 +92,9 @@ export function loadTransactions(config){
         return migrated;
       }
     }
-  }catch{}
+  }catch(err){
+    console.error("No se pudieron migrar movimientos v1", err);
+  }
 
   return [];
 }
@@ -100,7 +108,9 @@ export function loadBudgets(){
   try{
     const raw = localStorage.getItem(LS.BUD);
     if(raw) return JSON.parse(raw) || {};
-  }catch{}
+  }catch(err){
+    console.error("No se pudieron leer presupuestos v2", err);
+  }
 
   // migration v1
   try{
@@ -110,7 +120,9 @@ export function loadBudgets(){
       localStorage.setItem(LS.BUD, JSON.stringify(parsed));
       return parsed;
     }
-  }catch{}
+  }catch(err){
+    console.error("No se pudieron migrar presupuestos v1", err);
+  }
 
   return {};
 }
