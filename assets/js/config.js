@@ -5,6 +5,7 @@ export function initConfig(state){
   // refrescos desde router
   state.bus.on("config:refresh", ()=>{
     renderRates(state);
+    renderCategoryGrouping(state);
     renderBudgetTable(state);
   });
 
@@ -60,6 +61,31 @@ export function renderRates(state){
   if(window.innerWidth < 560) grid.style.gridTemplateColumns = "1fr";
 }
 
+function renderCategoryGrouping(state){
+  const config = state.config;
+  const tbody = el("tbodyCategoryGrouping");
+  const groups = (config.expenseGroups || []).filter(Boolean);
+  const map = config.expenseCategoryGroups || {};
+
+  tbody.innerHTML = config.expenseCategories.map(cat => {
+    const options = ["<option value=''>Sin grupo (usa categoría)</option>"]
+      .concat(groups.map(group => {
+        const selected = map[cat] === group ? "selected" : "";
+        return `<option value="${escapeHTML(group)}" ${selected}>${escapeHTML(group)}</option>`;
+      }))
+      .join("");
+
+    return `
+      <tr>
+        <td style="font-weight:900">${escapeHTML(cat)}</td>
+        <td>
+          <select data-group-cat="${escapeHTML(cat)}">${options}</select>
+        </td>
+      </tr>
+    `;
+  }).join("") || `<tr><td colspan="2" class="muted">Sin categorías de gastos.</td></tr>`;
+}
+
 export function saveConfigFromUI(state){
   const config = state.config;
 
@@ -70,6 +96,9 @@ export function saveConfigFromUI(state){
     .split("\n").map(s=>s.trim()).filter(Boolean);
 
   const incCats = el("categoriesIncomeText").value
+    .split("\n").map(s=>s.trim()).filter(Boolean);
+
+  const groups = el("expenseGroupsText").value
     .split("\n").map(s=>s.trim()).filter(Boolean);
 
   if(expCats.length < 3){
@@ -88,10 +117,19 @@ export function saveConfigFromUI(state){
   });
   rates[baseCurrency] = 1;
 
+  const categoryGroups = {};
+  document.querySelectorAll("#tbodyCategoryGrouping select[data-group-cat]").forEach(sel=>{
+    const cat = sel.dataset.groupCat;
+    const group = String(sel.value || "").trim();
+    if(expCats.includes(cat) && group) categoryGroups[cat] = group;
+  });
+
   config.locale = locale;
   config.baseCurrency = baseCurrency;
   config.expenseCategories = expCats;
   config.incomeCategories = incCats;
+  config.expenseGroups = groups;
+  config.expenseCategoryGroups = categoryGroups;
   config.ratesToBase = rates;
 
   saveConfig(config);
@@ -102,6 +140,7 @@ export function saveConfigFromUI(state){
   fillSelect(el("baseCurrency"), config.currencies);
 
   renderRates(state);
+  renderCategoryGrouping(state);
 
   toast("Config guardada ✅");
   state.bus.emit("config:changed");

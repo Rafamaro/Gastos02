@@ -1,6 +1,12 @@
 import { el, fmtMoney, toBase, groupSum, topEntry, escapeHTML } from "./utils.js";
 import { getFiltered } from "./ingreso.js";
 
+function expenseKeyFromAgg(tx, config, aggMode){
+  if(aggMode !== "group") return tx.category;
+  const group = config.expenseCategoryGroups?.[tx.category];
+  return group || tx.category;
+}
+
 export function initDashboard(state){
   // refrescos por eventos
   state.bus.on("dashboard:refresh", ()=> refreshDash(state));
@@ -49,7 +55,8 @@ export function refreshDash(state){
   const count = nlist.length;
   const avg = count ? (incTotal + expTotal) / count : 0;
 
-  const byCatExpense = groupSum(expenses, x=>x.category, x=>toBase(x.amount, x.currency, config));
+  const expenseAgg = el("dashAgg").value;
+  const byCatExpense = groupSum(expenses, x=>expenseKeyFromAgg(x, config, expenseAgg), x=>toBase(x.amount, x.currency, config));
   const byCatIncome = groupSum(incomes, x=>x.category, x=>toBase(x.amount, x.currency, config));
   const byPay = groupSum(nlist, x=>x.pay, x=>toBase(x.amount, x.currency, config));
 
@@ -81,7 +88,7 @@ export function refreshDash(state){
 
   renderCharts(state, nlist, month, byCatExpense, byCatIncome, byPay);
   renderBudgetStatus(state, expenses, month);
-  renderCategoryTable(state, byCatExpense, month);
+  renderCategoryTable(state, expenses, byCatExpense, month, expenseAgg);
 }
 
 // -----------------------------
@@ -144,7 +151,8 @@ function renderCharts(state, list, month, byCatExpense, byCatIncome, byPay){
 
   const mode = el("dashCatsMode").value;
   const byCat = mode==="income" ? byCatIncome : byCatExpense;
-  el("hCats").textContent = mode==="income" ? "Ingresos por categoría" : "Gastos por categoría";
+  if(mode==="income") el("hCats").textContent = "Ingresos por categoría";
+  else el("hCats").textContent = el("dashAgg").value === "group" ? "Gastos por grupo" : "Gastos por categoría";
 
   const catLabels = byCat.slice(0,10).map(x=>x.key);
   const catVals = byCat.slice(0,10).map(x=>Number(x.value.toFixed(2)));
@@ -216,16 +224,33 @@ function renderBudgetStatus(state, expenses, monthKey){
     }).join("");
 }
 
-function renderCategoryTable(state, byCatExpense, monthKey){
+function renderCategoryTable(state, expenses, byCatExpense, monthKey, expenseAgg){
   const config = state.config;
   const budgets = state.budgets;
 
+  if(expenseAgg === "group"){
+    el("tbodyCats").innerHTML = byCatExpense.map(r=>`
+      <tr>
+        <td style="font-weight:900">${escapeHTML(r.key)}</td>
+        <td>${fmtMoney(r.value, config.baseCurrency, config)}</td>
+        <td><span class='muted'>—</span></td>
+        <td><span class='muted'>N/A</span></td>
+      </tr>
+    `).join("") || `<tr><td colspan="4" class="muted">Sin datos.</td></tr>`;
+    return;
+  }
+
   const monthBudget = budgets[monthKey] || {};
   const mapBudget = new Map(Object.entries(monthBudget).map(([k,v])=>[k, Number(v)||0]));
+  const byCategory = groupSum(
+    expenses.filter(x=> String(x.date||"").startsWith(monthKey)),
+    x=>x.category,
+    x=>toBase(x.amount, x.currency, config)
+  );
 
-  const set = new Set([...byCatExpense.map(x=>x.key), ...Object.keys(monthBudget)]);
+  const set = new Set([...byCategory.map(x=>x.key), ...Object.keys(monthBudget)]);
   const rows = [...set].map(cat=>{
-    const spent = byCatExpense.find(x=>x.key===cat)?.value || 0;
+    const spent = byCategory.find(x=>x.key===cat)?.value || 0;
     const limit = mapBudget.get(cat) || 0;
     const pct = limit>0 ? (spent/limit)*100 : null;
     return {cat, spent, limit, pct};
@@ -244,3 +269,4 @@ function renderCategoryTable(state, byCatExpense, monthKey){
     `;
   }).join("") || `<tr><td colspan="4" class="muted">Sin datos.</td></tr>`;
 }
+

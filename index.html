@@ -252,7 +252,7 @@
         <table class="table" aria-label="Resumen por categoría (gastos)">
           <thead>
             <tr>
-              <th>Categoría</th>
+              <th>Categoría / Grupo</th>
               <th>Gasto (base)</th>
               <th>Presupuesto</th>
               <th>%</th>
@@ -296,6 +296,31 @@
             <label>Categorías de ingresos (una por línea)</label>
             <textarea id="categoriesIncomeText"></textarea>
             <div class="hint">Ej: Salario, Honorarios, Reembolso…</div>
+          </div>
+        </div>
+
+        <div style="margin-top:12px">
+          <h2 style="margin:0 0 10px">Grupos de categorías de gastos</h2>
+          <div class="hint">Creá grupos grandes (ej: Esenciales, Trabajo) y asigná cada categoría para ver estadísticas agrupadas en el dashboard.</div>
+
+          <div style="margin-top:10px">
+            <label>Grupos disponibles (uno por línea)</label>
+            <textarea id="expenseGroupsText" placeholder="Ej:
+Esenciales
+Trabajo
+Finanzas"></textarea>
+          </div>
+
+          <div style="margin-top:12px; max-height: 320px; overflow:auto; border-radius: 14px;">
+            <table class="table" aria-label="Asignación categoría a grupo">
+              <thead>
+                <tr>
+                  <th>Categoría de gasto</th>
+                  <th>Grupo</th>
+                </tr>
+              </thead>
+              <tbody id="tbodyCategoryGrouping"></tbody>
+            </table>
           </div>
         </div>
 
