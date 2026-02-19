@@ -1,0 +1,428 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Ingresos y Gastos — Registro & Evaluación</title>
+  <meta name="description" content="Registro y evaluación de ingresos y gastos con dashboard, presupuestos, gráficos y exportación." />
+
+  <link rel="stylesheet" href="./assets/css/styles.css" />
+</head>
+<body>
+<div class="wrap" id="app">
+    <header>
+      <div class="brand">
+        <div class="logo" aria-hidden="true">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+            <path d="M12 1.8c3.9 0 7.3 2 9.2 5.1-2.7-.3-5.4.6-7.2 2.4-2.2 2.2-3 5.5-2.1 8.4C7 17 3.7 12.9 3.7 8.2 5.7 4.2 8.7 1.8 12 1.8Z" fill="rgba(255,255,255,.95)"/>
+            <path d="M12.2 22.2c-4.8 0-8.7-3.9-8.7-8.7 0-1 .2-2 .5-2.9 1.2 5.3 5.9 9.2 11.5 8.9 2.4-.1 4.6-1 6.2-2.5-.8 3-3.9 5.2-9.5 5.2Z" fill="rgba(255,255,255,.85)"/>
+          </svg>
+        </div>
+        <div>
+          <h1>Ingresos & Gastos</h1>
+          <p class="muted">Movimientos → filtros → dashboard → exportación</p>
+        </div>
+      </div>
+
+      <div class="top-actions">
+        <span class="pill" id="pillMonth"></span>
+        <button class="btn small" id="btnTheme" title="Cambiar tema"><span aria-hidden="true">🌓</span> Tema</button>
+        <button class="btn small" id="btnExport" title="Exportar JSON"><span aria-hidden="true">⬇️</span> Exportar</button>
+        <label class="btn small" title="Importar JSON" style="cursor:pointer">
+          <input id="fileImport" type="file" accept="application/json" style="display:none" />
+          <span aria-hidden="true">⬆️</span> Importar
+        </label>
+        <button class="btn small danger" id="btnWipe" title="Borrar todos los datos"><span aria-hidden="true">🧨</span> Reset</button>
+      </div>
+    </header>
+
+    <nav class="tabs" role="tablist" aria-label="Secciones">
+      <div class="tab" role="tab" tabindex="0" data-tab="ingreso" aria-selected="true">➕ Ingreso</div>
+      <div class="tab" role="tab" tabindex="0" data-tab="dashboard" aria-selected="false">📊 Dashboard</div>
+      <div class="tab" role="tab" tabindex="0" data-tab="config" aria-selected="false">⚙️ Config</div>
+    </nav>
+
+    <!-- INGRESO -->
+    <section class="grid" data-view="ingreso">
+      <div class="card">
+        <h2>Nuevo movimiento</h2>
+
+        <div class="row">
+          <div>
+            <label>Tipo</label>
+            <div class="seg" role="radiogroup" aria-label="Tipo de movimiento">
+              <label><input type="radio" name="fType" value="expense" checked /> Gasto</label>
+              <label><input type="radio" name="fType" value="income" /> Ingreso</label>
+            </div>
+            <div class="hint" id="hintType">Los presupuestos se aplican a gastos.</div>
+          </div>
+          <div>
+            <label>Fecha</label>
+            <input type="date" id="fDate" />
+          </div>
+        </div>
+
+        <div class="row" style="margin-top:10px">
+          <div>
+            <label>Monto</label>
+            <input type="number" id="fAmount" step="0.01" min="0" placeholder="Ej: 12500" />
+            <div class="hint" id="hintAmount"></div>
+          </div>
+          <div>
+            <label>Moneda</label>
+            <select id="fCurrency"></select>
+          </div>
+        </div>
+
+        <div class="row" style="margin-top:10px">
+          <div>
+            <label id="labCategory">Categoría</label>
+            <select id="fCategory"></select>
+          </div>
+          <div>
+            <label id="labPay">Medio / Fuente</label>
+            <select id="fPay">
+              <option>Tarjeta</option>
+              <option>Débito</option>
+              <option>Efectivo</option>
+              <option>Transferencia</option>
+              <option>Cripto</option>
+              <option>Otro</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="row" style="margin-top:10px">
+          <div>
+            <label id="labVendor">Comercio / Origen</label>
+            <input type="text" id="fVendor" placeholder="Ej: Farmacia / Clínica / Banco..." />
+          </div>
+          <div>
+            <label>Descripción</label>
+            <input type="text" id="fDesc" placeholder="Ej: honorarios, café, insumos..." />
+          </div>
+        </div>
+
+        <div style="margin-top:10px">
+          <label>Tags (coma)</label>
+          <input type="text" id="fTags" placeholder="Ej: consultorio, personal, impuestos" />
+        </div>
+
+        <div style="margin-top:10px">
+          <label>Notas</label>
+          <textarea id="fNotes" placeholder="Algo que quieras recordar..."></textarea>
+        </div>
+
+        <div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:12px">
+          <button class="btn primary" id="btnAdd"><span aria-hidden="true">💾</span> Guardar</button>
+          <button class="btn" id="btnClear"><span aria-hidden="true">🧽</span> Limpiar</button>
+        </div>
+
+        <div class="hint">
+          *Guarda localmente en tu navegador (localStorage). Para multi-dispositivo, después lo conectás a DB/API.
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="split">
+          <h2 style="margin:0">Movimientos recientes</h2>
+          <div style="display:flex; gap:8px; flex-wrap:wrap">
+            <button class="btn small" id="btnCSV" title="Exportar CSV"><span aria-hidden="true">🧾</span> CSV</button>
+            <button class="btn small" id="btnQuickToday" title="Filtrar hoy"><span aria-hidden="true">📍</span> Hoy</button>
+            <button class="btn small" id="btnQuickMonth" title="Filtrar mes actual"><span aria-hidden="true">🗓️</span> Mes</button>
+          </div>
+        </div>
+
+        <div class="filters">
+          <div>
+            <label>Buscar</label>
+            <input id="qSearch" placeholder="texto, tag, comercio..." />
+          </div>
+          <div>
+            <label>Tipo</label>
+            <select id="qType">
+              <option value="(Todos)">(Todos)</option>
+              <option value="expense">Gastos</option>
+              <option value="income">Ingresos</option>
+            </select>
+          </div>
+          <div>
+            <label>Categoría</label>
+            <select id="qCategory"></select>
+          </div>
+          <div>
+            <label>Desde</label>
+            <input type="date" id="qFrom" />
+          </div>
+          <div>
+            <label>Hasta</label>
+            <input type="date" id="qTo" />
+          </div>
+        </div>
+
+        <div style="margin-top:12px; max-height: 520px; overflow:auto; border-radius: 14px;">
+          <table class="table" aria-label="Tabla de movimientos">
+            <thead>
+              <tr>
+                <th>Fecha</th>
+                <th>Detalle</th>
+                <th>Monto</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="tbody"></tbody>
+          </table>
+        </div>
+
+        <div style="display:flex; gap:10px; flex-wrap:wrap; justify-content:space-between; margin-top:12px">
+          <span class="muted" id="countInfo"></span>
+          <div style="display:flex; gap:10px; flex-wrap:wrap">
+            <button class="btn small" id="btnPrevPage">←</button>
+            <span class="pill" id="pageInfo"></span>
+            <button class="btn small" id="btnNextPage">→</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- DASHBOARD -->
+    <section class="card" data-view="dashboard" style="display:none">
+      <div class="split">
+        <div>
+          <h2 style="margin:0">Dashboard</h2>
+          <div class="hint">Resumen en moneda base, neto (ingresos - gastos) y alertas por presupuesto (solo gastos).</div>
+        </div>
+        <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center">
+          <div>
+            <label>Mes</label>
+            <input type="month" id="dashMonth" />
+          </div>
+          <div>
+            <label>Scope</label>
+            <select id="dashScope">
+              <option value="month">Mes seleccionado</option>
+              <option value="range">Rango por filtros</option>
+              <option value="all">Todo</option>
+            </select>
+          </div>
+          <div>
+            <label>Categorías</label>
+            <select id="dashCatsMode">
+              <option value="expense">Gastos</option>
+              <option value="income">Ingresos</option>
+            </select>
+          </div>
+          <div>
+            <label>Agrupar gastos</label>
+            <select id="dashAgg">
+              <option value="category">Por categoría</option>
+              <option value="group">Por grupo</option>
+            </select>
+          </div>
+          <button class="btn" id="btnRefreshDash"><span aria-hidden="true">🔄</span> Actualizar</button>
+        </div>
+      </div>
+
+      <div class="kpi" id="kpi"></div>
+
+      <div class="charts">
+        <div class="chartbox">
+          <h3>Por día (mes): Ingresos / Gastos / Neto</h3>
+          <canvas id="chartDaily" height="140"></canvas>
+          <div class="hint" id="fallbackDaily" style="display:none"></div>
+        </div>
+        <div class="chartbox">
+          <h3 id="hCats">Por categoría</h3>
+          <canvas id="chartCats" height="140"></canvas>
+          <div class="hint" id="fallbackCats" style="display:none"></div>
+        </div>
+        <div class="chartbox">
+          <h3>Medios / Fuentes</h3>
+          <canvas id="chartPay" height="140"></canvas>
+          <div class="hint" id="fallbackPay" style="display:none"></div>
+        </div>
+        <div class="chartbox">
+          <h3>Presupuesto (gastos)</h3>
+          <div id="budgetStatus"></div>
+          <div class="hint">Si una categoría supera el 100%, queda “peligro”.</div>
+        </div>
+      </div>
+
+      <div style="margin-top:14px; overflow:auto; border-radius: 14px;">
+        <table class="table" aria-label="Resumen por categoría (gastos)">
+          <thead>
+            <tr>
+              <th>Categoría</th>
+              <th>Gasto (base)</th>
+              <th>Presupuesto</th>
+              <th>%</th>
+            </tr>
+          </thead>
+          <tbody id="tbodyCats"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- CONFIG -->
+    <section class="grid" data-view="config" style="display:none">
+      <div class="card">
+        <h2>Configuración general</h2>
+
+        <div class="row">
+          <div>
+            <label>Moneda base</label>
+            <select id="baseCurrency"></select>
+            <div class="hint">Todo el dashboard se expresa en esta moneda.</div>
+          </div>
+          <div>
+            <label>Formato numérico</label>
+            <select id="numLocale">
+              <option value="es-AR">es-AR</option>
+              <option value="es-CO">es-CO</option>
+              <option value="en-US">en-US</option>
+              <option value="es-ES">es-ES</option>
+            </select>
+            <div class="hint">Solo afecta cómo se muestra, no el cálculo.</div>
+          </div>
+        </div>
+
+        <div class="row" style="margin-top:10px">
+          <div>
+            <label>Categorías de gastos (una por línea)</label>
+            <textarea id="categoriesExpenseText"></textarea>
+            <div class="hint">Ej: Salud, Transporte, Comida…</div>
+          </div>
+          <div>
+            <label>Categorías de ingresos (una por línea)</label>
+            <textarea id="categoriesIncomeText"></textarea>
+            <div class="hint">Ej: Salario, Honorarios, Reembolso…</div>
+          </div>
+        </div>
+
+        <div style="margin-top:12px">
+          <h2 style="margin:0 0 10px">Tasas de cambio (hacia moneda base)</h2>
+          <div class="hint">Si tu base es ARS: USD→ARS = 1050 (ej). Si no querés conversión, poné 1.</div>
+          <div id="ratesBox" style="display:grid; gap:10px; margin-top:10px"></div>
+        </div>
+
+        <div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:12px">
+          <button class="btn primary" id="btnSaveConfig"><span aria-hidden="true">✅</span> Guardar config</button>
+          <button class="btn" id="btnResetConfig"><span aria-hidden="true">♻️</span> Restaurar defaults</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Presupuestos mensuales por categoría (gastos)</h2>
+        <div class="hint">Límite por categoría de gasto. Si queda vacío, no se evalúa.</div>
+
+        <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:end">
+          <div style="min-width: 220px">
+            <label>Mes</label>
+            <input type="month" id="budgetMonth" />
+          </div>
+          <button class="btn" id="btnLoadBudgets"><span aria-hidden="true">📥</span> Cargar</button>
+          <button class="btn primary" id="btnSaveBudgets"><span aria-hidden="true">💾</span> Guardar</button>
+        </div>
+
+        <div style="margin-top:12px; max-height: 520px; overflow:auto; border-radius: 14px;">
+          <table class="table" aria-label="Tabla de presupuestos">
+            <thead>
+              <tr>
+                <th>Categoría</th>
+                <th>Presupuesto (moneda base)</th>
+              </tr>
+            </thead>
+            <tbody id="tbodyBudgets"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <dialog id="dlgEdit">
+      <div class="modal-head">
+        <strong>Editar movimiento</strong>
+        <button class="btn small ghost" id="btnCloseDlg" aria-label="Cerrar">✖</button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="eId" />
+
+        <div class="row">
+          <div>
+            <label>Tipo</label>
+            <select id="eType">
+              <option value="expense">Gasto</option>
+              <option value="income">Ingreso</option>
+            </select>
+          </div>
+          <div>
+            <label>Fecha</label>
+            <input type="date" id="eDate" />
+          </div>
+        </div>
+
+        <div class="row" style="margin-top:10px">
+          <div>
+            <label>Monto</label>
+            <input type="number" id="eAmount" step="0.01" min="0" />
+          </div>
+          <div>
+            <label>Moneda</label>
+            <select id="eCurrency"></select>
+          </div>
+        </div>
+
+        <div class="row" style="margin-top:10px">
+          <div>
+            <label>Categoría</label>
+            <select id="eCategory"></select>
+          </div>
+          <div>
+            <label>Medio / Fuente</label>
+            <select id="ePay"></select>
+          </div>
+        </div>
+
+        <div class="row" style="margin-top:10px">
+          <div>
+            <label>Comercio / Origen</label>
+            <input type="text" id="eVendor" />
+          </div>
+          <div>
+            <label>Descripción</label>
+            <input type="text" id="eDesc" />
+          </div>
+        </div>
+
+        <div style="margin-top:10px">
+          <label>Tags</label>
+          <input type="text" id="eTags" />
+        </div>
+
+        <div style="margin-top:10px">
+          <label>Notas</label>
+          <textarea id="eNotes"></textarea>
+        </div>
+      </div>
+
+      <div class="modal-foot">
+        <button class="btn danger" id="btnDelete"><span aria-hidden="true">🗑️</span> Eliminar</button>
+        <button class="btn" id="btnCancelEdit">Cancelar</button>
+        <button class="btn primary" id="btnSaveEdit">Guardar cambios</button>
+      </div>
+    </dialog>
+
+    <div class="toast" id="toast" role="status" aria-live="polite">
+      <span class="dot" id="toastDot"></span>
+      <span id="toastMsg">Listo</span>
+    </div>
+  </div>
+
+  <!-- Charts (CDN). Si estás offline, igual funciona (solo sin gráficos). -->
+
+  <!-- Charts (CDN). Si estás offline, igual funciona (solo sin gráficos). -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" defer></script>
+
+  <!-- App (ES Modules) -->
+  <script type="module" src="./assets/js/app.js"></script>
+</body>
+</html>
