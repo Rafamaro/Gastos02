@@ -16,6 +16,16 @@ export function mergeConfig(parsed){
 
   out.expenseCategories = Array.isArray(out.expenseCategories) ? out.expenseCategories : structuredClone(defaults.expenseCategories);
   out.incomeCategories = Array.isArray(out.incomeCategories) ? out.incomeCategories : structuredClone(defaults.incomeCategories);
+  out.expenseGroups = Array.isArray(out.expenseGroups) ? out.expenseGroups : structuredClone(defaults.expenseGroups);
+
+  const rawMap = out.expenseCategoryGroups && typeof out.expenseCategoryGroups === "object"
+    ? out.expenseCategoryGroups
+    : {};
+  out.expenseCategoryGroups = Object.fromEntries(
+    out.expenseCategories
+      .filter(cat => typeof rawMap[cat] === "string" && rawMap[cat].trim())
+      .map(cat => [cat, rawMap[cat].trim()])
+  );
 
   out.ratesToBase[out.baseCurrency] = 1;
   return out;
