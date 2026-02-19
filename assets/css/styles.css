@@ -215,6 +215,32 @@
       justify-content:space-between;
       margin-bottom: 10px;
     }
+    .recent-actions,
+    .pager-actions,
+    .dashboard-controls{
+      display:flex;
+      gap:10px;
+      flex-wrap:wrap;
+      align-items:center;
+    }
+
+    .table-wrap{
+      overflow:auto;
+      border-radius: 14px;
+      -webkit-overflow-scrolling: touch;
+    }
+    .table-wrap--fixed{
+      margin-top:12px;
+      max-height:520px;
+    }
+    .pager-row{
+      display:flex;
+      gap:10px;
+      flex-wrap:wrap;
+      justify-content:space-between;
+      margin-top:12px;
+      align-items:center;
+    }
 
     .filters{
       display:grid;
@@ -389,4 +415,22 @@
     .dot{
       width:10px;height:10px;border-radius:999px;background: var(--ok);
       box-shadow: 0 0 0 3px color-mix(in oklab, var(--ok) 25%, transparent);
+    }
+
+    @media (max-width: 640px){
+      .wrap{padding: 14px 10px 28px;}
+      .tabs{display:grid; grid-template-columns:1fr;}
+      .tab{text-align:center;}
+      .top-actions{width:100%;}
+      .top-actions .btn,
+      .top-actions .pill,
+      .recent-actions .btn,
+      .pager-actions .btn{
+        flex:1 1 calc(50% - 10px);
+        justify-content:center;
+      }
+      .dashboard-controls > *{flex: 1 1 100%;}
+      .dashboard-controls .btn{justify-content:center;}
+      .table th, .table td{padding: 8px 7px; font-size: 11px;}
+      .pill{justify-content:center;}
     }
