@@ -1,5 +1,6 @@
-import { el, monthISO, todayISO, fillSelect } from "./utils.js";
+import { el, monthISO, todayISO, fillSelect, toast } from "./utils.js";
 import { loadConfig, loadTransactions, loadBudgets, getTheme, setTheme } from "./storage.js";
+import { defaults } from "./constants.js";
 import { initTabs } from "./router.js";
 import { initIngreso } from "./ingreso.js";
 import { initDashboard } from "./dashboard.js";
@@ -34,9 +35,9 @@ function init(){
   setTheme(getTheme());
 
   // load data
-  state.config = loadConfig();
-  state.tx = loadTransactions(state.config);
-  state.budgets = loadBudgets();
+  state.config = safelyLoad("configuración", () => loadConfig(), structuredClone(defaults));
+  state.tx = safelyLoad("movimientos", () => loadTransactions(state.config), []);
+  state.budgets = safelyLoad("presupuestos", () => loadBudgets(), {});
 
   // defaults UI values
   el("fDate").value = todayISO();
@@ -72,6 +73,16 @@ function init(){
   state.bus.emit("dashboard:refresh");
   state.bus.emit("ingreso:refresh");
   state.bus.emit("config:refresh");
+}
+
+function safelyLoad(label, fn, fallback){
+  try{
+    return fn();
+  }catch(err){
+    console.error(`Error al cargar ${label}`, err);
+    toast(`No se pudo cargar ${label}. Se usaron valores por defecto.`, "warn");
+    return fallback;
+  }
 }
 
 init();

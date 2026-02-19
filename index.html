@@ -37,13 +37,13 @@
     </header>
 
     <nav class="tabs" role="tablist" aria-label="Secciones">
-      <div class="tab" role="tab" tabindex="0" data-tab="ingreso" aria-selected="true">➕ Ingreso</div>
-      <div class="tab" role="tab" tabindex="0" data-tab="dashboard" aria-selected="false">📊 Dashboard</div>
-      <div class="tab" role="tab" tabindex="0" data-tab="config" aria-selected="false">⚙️ Config</div>
+      <button class="tab" type="button" id="tab-ingreso" role="tab" data-tab="ingreso" aria-controls="view-ingreso" tabindex="0" aria-selected="true">➕ Ingreso</button>
+      <button class="tab" type="button" id="tab-dashboard" role="tab" data-tab="dashboard" aria-controls="view-dashboard" tabindex="-1" aria-selected="false">📊 Dashboard</button>
+      <button class="tab" type="button" id="tab-config" role="tab" data-tab="config" aria-controls="view-config" tabindex="-1" aria-selected="false">⚙️ Config</button>
     </nav>
 
     <!-- INGRESO -->
-    <section class="grid" data-view="ingreso">
+    <section class="grid" id="view-ingreso" role="tabpanel" aria-labelledby="tab-ingreso" data-view="ingreso">
       <div class="card">
         <h2>Nuevo movimiento</h2>
 
@@ -187,7 +187,7 @@
     </section>
 
     <!-- DASHBOARD -->
-    <section class="card" data-view="dashboard" style="display:none">
+    <section class="card" id="view-dashboard" role="tabpanel" aria-labelledby="tab-dashboard" data-view="dashboard" style="display:none">
       <div class="split">
         <div>
           <h2 style="margin:0">Dashboard</h2>
@@ -265,7 +265,7 @@
     </section>
 
     <!-- CONFIG -->
-    <section class="grid" data-view="config" style="display:none">
+    <section class="grid" id="view-config" role="tabpanel" aria-labelledby="tab-config" data-view="config" style="display:none">
       <div class="card">
         <h2>Configuración general</h2>
 
@@ -443,10 +443,31 @@ Finanzas"></textarea>
     </div>
   </div>
 
-  <!-- Charts (CDN). Si estás offline, igual funciona (solo sin gráficos). -->
+  <!-- Charts: intenta múltiples CDNs. Si falla, la app sigue (sin gráficos). -->
+  <script>
+    (function(){
+      const chartSources = [
+        "https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js",
+        "https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"
+      ];
+      let idx = 0;
 
-  <!-- Charts (CDN). Si estás offline, igual funciona (solo sin gráficos). -->
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" defer></script>
+      function loadNext(){
+        if(idx >= chartSources.length){
+          console.warn("No se pudo cargar Chart.js desde CDNs disponibles.");
+          return;
+        }
+        const script = document.createElement("script");
+        script.src = chartSources[idx++];
+        script.defer = true;
+        script.crossOrigin = "anonymous";
+        script.onerror = loadNext;
+        document.head.appendChild(script);
+      }
+
+      loadNext();
+    })();
+  </script>
 
   <!-- App (ES Modules) -->
   <script type="module" src="./assets/js/app.js"></script>

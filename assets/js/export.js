@@ -38,24 +38,32 @@ export function importJSON(state, ev){
   reader.onload = () => {
     try{
       const parsed = JSON.parse(String(reader.result || "{}"));
-      if(parsed && typeof parsed === "object"){
-        // v2 expected
-        if(Array.isArray(parsed.transactions)) state.tx = parsed.transactions;
-        // v1 compat: expenses
-        else if(Array.isArray(parsed.expenses)) state.tx = parsed.expenses.map(x=> ({ ...x, type:"expense" }));
-
-        if(parsed.config) state.config = parsed.config;
-        if(parsed.budgets && typeof parsed.budgets === "object") state.budgets = parsed.budgets;
-
-        saveTransactions(state.tx);
-        saveConfig(state.config);
-        saveBudgets(state.budgets);
-
-        toast("Importado ✅ (recargando…)", "warn");
-        setTimeout(()=> location.reload(), 600);
+      if(!parsed || typeof parsed !== "object"){
+        toast("Archivo inválido.", "danger");
+        return;
       }
-    }catch{
-      toast("Archivo inválido.", "danger");
+
+      // v2 expected
+      if(Array.isArray(parsed.transactions)) state.tx = parsed.transactions;
+      // v1 compat: expenses
+      else if(Array.isArray(parsed.expenses)) state.tx = parsed.expenses.map(x=> ({ ...x, type:"expense" }));
+      else {
+        toast("El archivo no tiene movimientos válidos.", "danger");
+        return;
+      }
+
+      if(parsed.config) state.config = parsed.config;
+      if(parsed.budgets && typeof parsed.budgets === "object") state.budgets = parsed.budgets;
+
+      saveTransactions(state.tx);
+      saveConfig(state.config);
+      saveBudgets(state.budgets);
+
+      toast("Importado ✅ (recargando…)", "warn");
+      setTimeout(()=> location.reload(), 600);
+    }catch(err){
+      console.error("Error importando JSON", err);
+      toast("Archivo inválido o corrupto.", "danger");
     }finally{
       ev.target.value = "";
     }
