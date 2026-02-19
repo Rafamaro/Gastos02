@@ -1,6 +1,12 @@
 import { el, fmtMoney, toBase, groupSum, topEntry, escapeHTML } from "./utils.js";
 import { getFiltered } from "./ingreso.js";
 
+const REENTRY_TRANSFER_SOURCE = "Reingreso por transferencia";
+
+function isReentryTransfer(tx){
+  return tx.type === "income" && tx.pay === REENTRY_TRANSFER_SOURCE;
+}
+
 function expenseKeyFromAgg(tx, config, aggMode){
   if(aggMode !== "group") return tx.category;
   const group = config.expenseCategoryGroups?.[tx.category];
@@ -47,17 +53,20 @@ export function refreshDash(state){
 
   const incomes = nlist.filter(x=>x.type==="income");
   const expenses = nlist.filter(x=>x.type==="expense");
+  const reentryTransfers = incomes.filter(isReentryTransfer);
+  const regularIncomes = incomes.filter(x=>!isReentryTransfer(x));
 
-  const incTotal = incomes.reduce((s,x)=> s + toBase(x.amount, x.currency, config), 0);
+  const incTotal = regularIncomes.reduce((s,x)=> s + toBase(x.amount, x.currency, config), 0);
+  const reentryTotal = reentryTransfers.reduce((s,x)=> s + toBase(x.amount, x.currency, config), 0);
   const expTotal = expenses.reduce((s,x)=> s + toBase(x.amount, x.currency, config), 0);
-  const net = incTotal - expTotal;
+  const net = incTotal + reentryTotal - expTotal;
 
   const count = nlist.length;
-  const avg = count ? (incTotal + expTotal) / count : 0;
+  const avg = count ? (incTotal + reentryTotal + expTotal) / count : 0;
 
   const expenseAgg = el("dashAgg").value;
   const byCatExpense = groupSum(expenses, x=>expenseKeyFromAgg(x, config, expenseAgg), x=>toBase(x.amount, x.currency, config));
-  const byCatIncome = groupSum(incomes, x=>x.category, x=>toBase(x.amount, x.currency, config));
+  const byCatIncome = groupSum(regularIncomes, x=>x.category, x=>toBase(x.amount, x.currency, config));
   const byPay = groupSum(nlist, x=>x.pay, x=>toBase(x.amount, x.currency, config));
 
   const topExp = topEntry(byCatExpense);
@@ -82,7 +91,7 @@ export function refreshDash(state){
     <div class="box">
       <div class="label">Ahorro (%)</div>
       <div class="value">${incTotal>0 ? ((net/incTotal)*100).toFixed(0)+"%" : "—"}</div>
-      <div class="sub">${incTotal>0 ? "Neto / Ingresos" : "Sin ingresos"}</div>
+      <div class="sub">${incTotal>0 ? `Neto / Ingresos${reentryTotal>0 ? " (sin reingresos)" : ""}` : "Sin ingresos"}</div>
     </div>
   `;
 
@@ -111,8 +120,9 @@ function renderCharts(state, list, month, byCatExpense, byCatIncome, byPay){
     const d = Number(String(x.date).slice(8,10));
     if(d>=1 && d<=daysInMonth){
       const base = toBase(x.amount, x.currency, config);
-      if(x.type==="income") incByDay[d-1] += base;
-      else expByDay[d-1] += base;
+      if(x.type==="income" && !isReentryTransfer(x)) incByDay[d-1] += base;
+      else if(x.type==="expense") expByDay[d-1] += base;
+      else if(isReentryTransfer(x)) expByDay[d-1] -= base;
     }
   }
   const netByDay = incByDay.map((v,i)=> v - expByDay[i]);

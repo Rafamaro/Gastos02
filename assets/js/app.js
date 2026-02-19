@@ -51,7 +51,7 @@ function init(){
 
   // pay options for edit select
   // (en ingreso.js se refresca categorías, acá llenamos ePay y queda fijo)
-  const pay = ["Tarjeta","Débito","Efectivo","Transferencia","Cripto","Otro"];
+  const pay = ["Tarjeta","Débito","Efectivo","Transferencia","Reingreso por transferencia","Cripto","Otro"];
   fillSelect(el("ePay"), pay);
 
   // config UI
