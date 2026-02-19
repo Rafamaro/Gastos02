@@ -127,7 +127,7 @@
       <div class="card">
         <div class="split">
           <h2 style="margin:0">Movimientos recientes</h2>
-          <div style="display:flex; gap:8px; flex-wrap:wrap">
+          <div class="recent-actions">
             <button class="btn small" id="btnCSV" title="Exportar CSV"><span aria-hidden="true">🧾</span> CSV</button>
             <button class="btn small" id="btnQuickToday" title="Filtrar hoy"><span aria-hidden="true">📍</span> Hoy</button>
             <button class="btn small" id="btnQuickMonth" title="Filtrar mes actual"><span aria-hidden="true">🗓️</span> Mes</button>
@@ -161,7 +161,7 @@
           </div>
         </div>
 
-        <div style="margin-top:12px; max-height: 520px; overflow:auto; border-radius: 14px;">
+        <div class="table-wrap table-wrap--fixed">
           <table class="table" aria-label="Tabla de movimientos">
             <thead>
               <tr>
@@ -175,9 +175,9 @@
           </table>
         </div>
 
-        <div style="display:flex; gap:10px; flex-wrap:wrap; justify-content:space-between; margin-top:12px">
+        <div class="pager-row">
           <span class="muted" id="countInfo"></span>
-          <div style="display:flex; gap:10px; flex-wrap:wrap">
+          <div class="pager-actions">
             <button class="btn small" id="btnPrevPage">←</button>
             <span class="pill" id="pageInfo"></span>
             <button class="btn small" id="btnNextPage">→</button>
@@ -193,7 +193,7 @@
           <h2 style="margin:0">Dashboard</h2>
           <div class="hint">Resumen en moneda base, neto (ingresos - gastos) y alertas por presupuesto (solo gastos).</div>
         </div>
-        <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center">
+        <div class="dashboard-controls">
           <div>
             <label>Mes</label>
             <input type="month" id="dashMonth" />
@@ -249,7 +249,7 @@
         </div>
       </div>
 
-      <div style="margin-top:14px; overflow:auto; border-radius: 14px;">
+      <div class="table-wrap" style="margin-top:14px;">
         <table class="table" aria-label="Resumen por categoría (gastos)">
           <thead>
             <tr>
