@@ -43,6 +43,7 @@ function init(){
   el("fDate").value = todayISO();
   el("dashMonth").value = monthISO();
   el("budgetMonth").value = monthISO();
+  el("budgetMode").value = "category";
   el("pillMonth").textContent = "Mes: " + monthISO();
 
   // selects (currency/base)

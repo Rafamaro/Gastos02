@@ -1,6 +1,12 @@
 import { el, fillSelect, monthISO, escapeHTML, toast } from "./utils.js";
 import { saveConfig, saveBudgets } from "./storage.js";
 
+const GROUP_BUDGET_PREFIX = "__group__::";
+
+function groupBudgetKey(group){
+  return `${GROUP_BUDGET_PREFIX}${group}`;
+}
+
 export function initConfig(state){
   // refrescos desde router
   state.bus.on("config:refresh", ()=>{
@@ -22,6 +28,7 @@ export function initConfig(state){
   el("btnLoadBudgets").addEventListener("click", ()=> renderBudgetTable(state));
   el("btnSaveBudgets").addEventListener("click", ()=> saveBudgetsFromUI(state));
   el("budgetMonth").addEventListener("change", ()=> renderBudgetTable(state));
+  el("budgetMode").addEventListener("change", ()=> renderBudgetTable(state));
 }
 
 export function renderRates(state){
@@ -152,19 +159,30 @@ export function saveConfigFromUI(state){
 export function renderBudgetTable(state){
   const config = state.config;
   const budgets = state.budgets;
+  const mode = el("budgetMode").value || "category";
 
   const m = el("budgetMonth").value || monthISO();
   const monthBudget = budgets[m] || {};
   const tbody = el("tbodyBudgets");
+  const label = mode === "group" ? "Grupo" : "Categoría";
+  el("thBudgetEntity").textContent = label;
   tbody.innerHTML = "";
 
-  for(const cat of config.expenseCategories){
+  const entities = mode === "group" ? (config.expenseGroups || []).filter(Boolean) : config.expenseCategories;
+
+  if(entities.length === 0){
+    tbody.innerHTML = `<tr><td colspan="2" class="muted">No hay ${mode === "group" ? "grupos" : "categorías"} de gasto.</td></tr>`;
+    return;
+  }
+
+  for(const entity of entities){
+    const budgetKey = mode === "group" ? groupBudgetKey(entity) : entity;
     const tr = document.createElement("tr");
     tr.innerHTML = `
-      <td style="font-weight:900">${escapeHTML(cat)}</td>
+      <td style="font-weight:900">${escapeHTML(entity)}</td>
       <td>
-        <input type="number" step="0.01" min="0" data-cat="${escapeHTML(cat)}"
-          value="${Number(monthBudget[cat]||"") || ""}" placeholder="(sin límite)" />
+        <input type="number" step="0.01" min="0" data-budget-key="${escapeHTML(budgetKey)}"
+          value="${Number(monthBudget[budgetKey]||"") || ""}" placeholder="(sin límite)" />
       </td>
     `;
     tbody.appendChild(tr);
@@ -176,8 +194,8 @@ export function saveBudgetsFromUI(state){
   const m = el("budgetMonth").value || monthISO();
   const monthBudget = {};
 
-  document.querySelectorAll("#tbodyBudgets input[data-cat]").forEach(inp=>{
-    const cat = inp.dataset.cat;
+  document.querySelectorAll("#tbodyBudgets input[data-budget-key]").forEach(inp=>{
+    const cat = inp.dataset.budgetKey;
     const v = Number(inp.value);
     if(Number.isFinite(v) && v>0) monthBudget[cat] = v;
   });

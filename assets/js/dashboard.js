@@ -2,6 +2,11 @@ import { el, fmtMoney, toBase, groupSum, topEntry, escapeHTML } from "./utils.js
 import { getFiltered } from "./ingreso.js";
 
 const REENTRY_TRANSFER_SOURCE = "Reingreso por transferencia";
+const GROUP_BUDGET_PREFIX = "__group__::";
+
+function groupBudgetKey(group){
+  return `${GROUP_BUDGET_PREFIX}${group}`;
+}
 
 function isReentryTransfer(tx){
   return tx.type === "income" && tx.pay === REENTRY_TRANSFER_SOURCE;
@@ -96,7 +101,7 @@ export function refreshDash(state){
   `;
 
   renderCharts(state, nlist, month, byCatExpense, byCatIncome, byPay);
-  renderBudgetStatus(state, expenses, month);
+  renderBudgetStatus(state, expenses, month, expenseAgg);
   renderCategoryTable(state, expenses, byCatExpense, month, expenseAgg);
 }
 
@@ -186,30 +191,17 @@ function renderCharts(state, list, month, byCatExpense, byCatIncome, byPay){
 // -----------------------------
 // Budgets
 // -----------------------------
-function renderBudgetStatus(state, expenses, monthKey){
+function renderBudgetStatus(state, expenses, monthKey, expenseAgg){
   const config = state.config;
   const budgets = state.budgets;
 
   const monthBudget = budgets[monthKey] || {};
-  const byCat = groupSum(
-    expenses.filter(x=> String(x.date||"").startsWith(monthKey)),
-    x=>x.category,
-    x=>toBase(x.amount, x.currency, config)
-  );
-
-  const rows = (config.expenseCategories||[]).map(cat=>{
-    const spent = byCat.find(x=>x.key===cat)?.value || 0;
-    const limit = Number(monthBudget[cat] || 0);
-    if(!limit) return { cat, spent, limit, pct: null, status: "—" };
-    const p = (spent/limit)*100;
-    let status = "ok";
-    if(p>=100) status="danger";
-    else if(p>=80) status="warn";
-    return { cat, spent, limit, pct: p, status };
-  }).filter(r=>r.limit>0);
+  const rows = expenseAgg === "group"
+    ? buildGroupBudgetRows(expenses, config, monthBudget, monthKey)
+    : buildCategoryBudgetRows(expenses, config, monthBudget, monthKey);
 
   if(rows.length===0){
-    el("budgetStatus").innerHTML = `<span class="muted">No hay presupuestos definidos para ${monthKey}.</span>`;
+    el("budgetStatus").innerHTML = `<span class="muted">No hay presupuestos definidos para ${monthKey} en modo ${expenseAgg === "group" ? "grupo" : "categoría"}.</span>`;
     return;
   }
 
@@ -222,7 +214,7 @@ function renderBudgetStatus(state, expenses, monthKey){
       return `
         <div style="display:flex; justify-content:space-between; gap:10px; padding:10px 0; border-bottom:1px solid var(--border)">
           <div>
-            <div style="font-weight:900">${escapeHTML(r.cat)}</div>
+            <div style="font-weight:900">${escapeHTML(r.label)}</div>
             <div class="muted" style="margin-top:2px">${fmtMoney(r.spent, config.baseCurrency, config)} / ${fmtMoney(r.limit, config.baseCurrency, config)}</div>
           </div>
           <div style="text-align:right">
@@ -234,19 +226,65 @@ function renderBudgetStatus(state, expenses, monthKey){
     }).join("");
 }
 
+function buildCategoryBudgetRows(expenses, config, monthBudget, monthKey){
+  const byCat = groupSum(
+    expenses.filter(x=> String(x.date||"").startsWith(monthKey)),
+    x=>x.category,
+    x=>toBase(x.amount, x.currency, config)
+  );
+
+  return (config.expenseCategories||[]).map(cat=>{
+    const spent = byCat.find(x=>x.key===cat)?.value || 0;
+    const limit = Number(monthBudget[cat] || 0);
+    if(!limit) return null;
+    const p = (spent/limit)*100;
+    let status = "ok";
+    if(p>=100) status="danger";
+    else if(p>=80) status="warn";
+    return { label: cat, spent, limit, pct: p, status };
+  }).filter(Boolean);
+}
+
+function buildGroupBudgetRows(expenses, config, monthBudget, monthKey){
+  const byGroup = groupSum(
+    expenses.filter(x=> String(x.date||"").startsWith(monthKey)),
+    x=>expenseKeyFromAgg(x, config, "group"),
+    x=>toBase(x.amount, x.currency, config)
+  );
+
+  const groups = (config.expenseGroups || []).filter(Boolean);
+  return groups.map(group=>{
+    const spent = byGroup.find(x=>x.key===group)?.value || 0;
+    const limit = Number(monthBudget[groupBudgetKey(group)] || 0);
+    if(!limit) return null;
+    const p = (spent/limit)*100;
+    let status = "ok";
+    if(p>=100) status="danger";
+    else if(p>=80) status="warn";
+    return { label: group, spent, limit, pct: p, status };
+  }).filter(Boolean);
+}
+
 function renderCategoryTable(state, expenses, byCatExpense, monthKey, expenseAgg){
   const config = state.config;
   const budgets = state.budgets;
 
   if(expenseAgg === "group"){
-    el("tbodyCats").innerHTML = byCatExpense.map(r=>`
-      <tr>
-        <td style="font-weight:900">${escapeHTML(r.key)}</td>
-        <td>${fmtMoney(r.value, config.baseCurrency, config)}</td>
-        <td><span class='muted'>—</span></td>
-        <td><span class='muted'>N/A</span></td>
-      </tr>
-    `).join("") || `<tr><td colspan="4" class="muted">Sin datos.</td></tr>`;
+    const monthBudget = budgets[monthKey] || {};
+    el("tbodyCats").innerHTML = byCatExpense.map(r=>{
+      const limit = Number(monthBudget[groupBudgetKey(r.key)] || 0);
+      const pct = limit>0 ? (r.value/limit)*100 : null;
+      const pctStr = pct==null ? "—" : pct.toFixed(0)+"%";
+      const flag = pct==null ? "" : (pct>=100 ? "danger" : pct>=80 ? "warn" : "ok");
+      return `
+        <tr>
+          <td style="font-weight:900">${escapeHTML(r.key)}</td>
+          <td>${fmtMoney(r.value, config.baseCurrency, config)}</td>
+          <td>${limit>0 ? fmtMoney(limit, config.baseCurrency, config) : "<span class='muted'>—</span>"}</td>
+          <td>${pct==null ? "<span class='muted'>—</span>" : `<span class="badge ${flag}">${pctStr}</span>`}</td>
+        </tr>
+      `;
+    }).join("") || `<tr><td colspan="4" class="muted">Sin datos.</td></tr>`;
     return;
   }
 
