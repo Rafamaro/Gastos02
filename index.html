@@ -338,13 +338,20 @@ Finanzas"></textarea>
       </div>
 
       <div class="card">
-        <h2>Presupuestos mensuales por categoría (gastos)</h2>
-        <div class="hint">Límite por categoría de gasto. Si queda vacío, no se evalúa.</div>
+        <h2>Presupuestos mensuales de gastos</h2>
+        <div class="hint">Podés definir límites por categoría o por grupo. Si queda vacío, no se evalúa.</div>
 
         <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:end">
           <div style="min-width: 220px">
             <label>Mes</label>
             <input type="month" id="budgetMonth" />
+          </div>
+          <div style="min-width: 220px">
+            <label>Modo</label>
+            <select id="budgetMode">
+              <option value="category">Por categoría</option>
+              <option value="group">Por grupo</option>
+            </select>
           </div>
           <button class="btn" id="btnLoadBudgets"><span aria-hidden="true">📥</span> Cargar</button>
           <button class="btn primary" id="btnSaveBudgets"><span aria-hidden="true">💾</span> Guardar</button>
@@ -354,7 +361,7 @@ Finanzas"></textarea>
           <table class="table" aria-label="Tabla de presupuestos">
             <thead>
               <tr>
-                <th>Categoría</th>
+                <th id="thBudgetEntity">Categoría</th>
                 <th>Presupuesto (moneda base)</th>
               </tr>
             </thead>
