@@ -112,6 +112,11 @@ function renderCharts(state, list, month, byCatExpense, byCatIncome, byPay){
   const config = state.config;
   const hasChart = typeof Chart !== "undefined";
 
+  const css = getComputedStyle(document.documentElement);
+  const axisColor = css.getPropertyValue("--muted").trim() || "#9ca3af";
+  const borderColor = css.getPropertyValue("--border").trim() || "rgba(255,255,255,.14)";
+  const textColor = css.getPropertyValue("--text").trim() || "#e5e7eb";
+
   const daysInMonth = (() => {
     const [y,m] = month.split("-").map(Number);
     return new Date(y, m, 0).getDate();
@@ -156,12 +161,48 @@ function renderCharts(state, list, month, byCatExpense, byCatIncome, byPay){
     data: {
       labels: Array.from({length: daysInMonth}, (_,i)=> String(i+1)),
       datasets: [
-        { label: `Ingresos (${config.baseCurrency})`, data: incByDay.map(v=>Number(v.toFixed(2))) },
-        { label: `Gastos (${config.baseCurrency})`, data: expByDay.map(v=>Number(v.toFixed(2))) },
-        { label: `Neto (${config.baseCurrency})`, data: netByDay.map(v=>Number(v.toFixed(2))) }
+        {
+          label: `Ingresos (${config.baseCurrency})`,
+          data: incByDay.map(v=>Number(v.toFixed(2))),
+          borderColor: "#22c55e",
+          backgroundColor: "rgba(34, 197, 94, .22)",
+          pointBackgroundColor: "#22c55e",
+          tension: .32,
+          fill: true
+        },
+        {
+          label: `Gastos (${config.baseCurrency})`,
+          data: expByDay.map(v=>Number(v.toFixed(2))),
+          borderColor: "#ef4444",
+          backgroundColor: "rgba(239, 68, 68, .20)",
+          pointBackgroundColor: "#ef4444",
+          tension: .32,
+          fill: true
+        },
+        {
+          label: `Neto (${config.baseCurrency})`,
+          data: netByDay.map(v=>Number(v.toFixed(2))),
+          borderColor: "#8b5cf6",
+          backgroundColor: "rgba(139, 92, 246, .18)",
+          pointBackgroundColor: "#8b5cf6",
+          borderDash: [6,4],
+          tension: .28,
+          fill: false
+        }
       ]
     },
-    options: { responsive:true, plugins:{ legend:{display:true} } }
+    options: {
+      responsive:true,
+      interaction: { mode: "index", intersect: false },
+      plugins:{
+        legend:{ display:true, labels:{ color:textColor, usePointStyle:true, boxWidth:10 } },
+        tooltip: { callbacks: { label: ctx => `${ctx.dataset.label}: ${fmtMoney(ctx.parsed.y || 0, config.baseCurrency, config)}` } }
+      },
+      scales: {
+        x: { grid: { color: borderColor }, ticks: { color: axisColor } },
+        y: { grid: { color: borderColor }, ticks: { color: axisColor } }
+      }
+    }
   });
 
   const mode = el("dashCatsMode").value;
@@ -171,20 +212,78 @@ function renderCharts(state, list, month, byCatExpense, byCatIncome, byPay){
 
   const catLabels = byCat.slice(0,10).map(x=>x.key);
   const catVals = byCat.slice(0,10).map(x=>Number(x.value.toFixed(2)));
+  const catPalette = buildPalette(catVals.length, mode === "income" ? "income" : "expense");
 
   state.charts.cats = new Chart(el("chartCats"), {
     type: "doughnut",
-    data: { labels: catLabels, datasets: [{ label: `Por categoría (${config.baseCurrency})`, data: catVals }] },
-    options: { responsive:true }
+    data: {
+      labels: catLabels,
+      datasets: [{
+        label: `Por categoría (${config.baseCurrency})`,
+        data: catVals,
+        backgroundColor: catPalette,
+        borderColor,
+        borderWidth: 1.5,
+        hoverOffset: 8
+      }]
+    },
+    options: {
+      responsive:true,
+      plugins: {
+        legend: { labels: { color:textColor } },
+        tooltip: { callbacks: { label: ctx => `${ctx.label}: ${fmtMoney(ctx.parsed || 0, config.baseCurrency, config)}` } }
+      }
+    }
   });
 
   const payLabels = byPay.map(x=>x.key);
   const payVals = byPay.map(x=>Number(x.value.toFixed(2)));
+  const payPalette = buildPalette(payVals.length, "pay");
 
   state.charts.pay = new Chart(el("chartPay"), {
     type: "bar",
-    data: { labels: payLabels, datasets: [{ label: `Por medio/fuente (${config.baseCurrency})`, data: payVals }] },
-    options: { responsive:true }
+    data: {
+      labels: payLabels,
+      datasets: [{
+        label: `Por medio/fuente (${config.baseCurrency})`,
+        data: payVals,
+        backgroundColor: payPalette,
+        borderColor: payPalette,
+        borderWidth: 1,
+        borderRadius: 8,
+        maxBarThickness: 44
+      }]
+    },
+    options: {
+      responsive:true,
+      plugins: {
+        legend: { labels: { color:textColor } },
+        tooltip: { callbacks: { label: ctx => `${ctx.dataset.label}: ${fmtMoney(ctx.parsed.y || 0, config.baseCurrency, config)}` } }
+      },
+      scales: {
+        x: { grid: { color: borderColor }, ticks: { color: axisColor } },
+        y: { grid: { color: borderColor }, ticks: { color: axisColor } }
+      }
+    }
+  });
+}
+
+function buildPalette(size, theme){
+  if(size <= 0) return [];
+
+  const map = {
+    income: { from: [34, 197, 94], to: [16, 185, 129] },
+    expense: { from: [248, 113, 113], to: [251, 146, 60] },
+    pay: { from: [59, 130, 246], to: [168, 85, 247] }
+  };
+
+  const { from, to } = map[theme] || map.pay;
+  return Array.from({ length: size }, (_, i)=>{
+    const t = size === 1 ? 0 : i / (size - 1);
+    const r = Math.round(from[0] + (to[0] - from[0]) * t);
+    const g = Math.round(from[1] + (to[1] - from[1]) * t);
+    const b = Math.round(from[2] + (to[2] - from[2]) * t);
+    return `rgba(${r}, ${g}, ${b}, .85)`;
   });
 }
 
@@ -317,4 +416,3 @@ function renderCategoryTable(state, expenses, byCatExpense, monthKey, expenseAgg
     `;
   }).join("") || `<tr><td colspan="4" class="muted">Sin datos.</td></tr>`;
 }
-
