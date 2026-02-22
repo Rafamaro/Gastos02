@@ -21,8 +21,7 @@
           </svg>
         </div>
         <div>
-          <h1>Ingresos & Gastos</h1>
-          <p class="muted">Movimientos → filtros → dashboard → exportación</p>
+          <h1>Ingresos & Gastos <span class="version-badge">Versión 1.2</span></h1>
         </div>
       </div>
 
@@ -235,9 +234,25 @@
           <div class="hint" id="fallbackDaily" style="display:none"></div>
         </div>
         <div class="chartbox">
+          <h3>Comparativo mensual: Ingresos / Gastos / Neto</h3>
+          <canvas id="chartMonthlyCompare" height="140"></canvas>
+          <div class="hint" id="fallbackMonthly" style="display:none"></div>
+        </div>
+        <div class="chartbox">
           <h3 id="hCats">Por categoría</h3>
           <canvas id="chartCats" height="140"></canvas>
           <div class="hint" id="fallbackCats" style="display:none"></div>
+        </div>
+        <div class="chartbox">
+          <div class="split" style="margin-bottom:10px">
+            <h3 style="margin:0" id="hMonthlyBreakdown">Gastos por categoría (comparativa)</h3>
+            <select id="dashMonthlyWindow" style="min-width:170px">
+              <option value="6">Últimos 6 meses</option>
+              <option value="12">Últimos 12 meses</option>
+            </select>
+          </div>
+          <canvas id="chartMonthlyBreakdown" height="140"></canvas>
+          <div class="hint" id="fallbackMonthlyBreakdown" style="display:none"></div>
         </div>
         <div class="chartbox">
           <h3>Medios / Fuentes</h3>

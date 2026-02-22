@@ -27,7 +27,7 @@ const state = {
   budgets: {},
   page: 1,
   PAGE_SIZE: 12,
-  charts: { daily:null, cats:null, pay:null },
+  charts: { daily:null, monthly:null, cats:null, monthlyBreakdown:null, pay:null },
 };
 
 function init(){
