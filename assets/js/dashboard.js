@@ -271,19 +271,20 @@ function renderCharts(state, list, month, byCatExpense, byCatIncome, byPay){
 function buildPalette(size, theme){
   if(size <= 0) return [];
 
-  const map = {
-    income: { from: [34, 197, 94], to: [16, 185, 129] },
-    expense: { from: [248, 113, 113], to: [251, 146, 60] },
-    pay: { from: [59, 130, 246], to: [168, 85, 247] }
+  const themes = {
+    income: { startHue: 120, spread: 220, sat: 72, light: 52 },
+    expense: { startHue: 10, spread: 320, sat: 78, light: 56 },
+    pay: { startHue: 210, spread: 260, sat: 74, light: 54 }
   };
 
-  const { from, to } = map[theme] || map.pay;
+  const { startHue, spread, sat, light } = themes[theme] || themes.pay;
+
   return Array.from({ length: size }, (_, i)=>{
-    const t = size === 1 ? 0 : i / (size - 1);
-    const r = Math.round(from[0] + (to[0] - from[0]) * t);
-    const g = Math.round(from[1] + (to[1] - from[1]) * t);
-    const b = Math.round(from[2] + (to[2] - from[2]) * t);
-    return `rgba(${r}, ${g}, ${b}, .85)`;
+    const t = size === 1 ? 0 : i / size;
+    const hue = (startHue + spread * t) % 360;
+    const satShift = sat + ((i % 2 === 0) ? 0 : -8);
+    const lightShift = light + ((i % 3 === 0) ? 5 : 0);
+    return `hsla(${Math.round(hue)} ${satShift}% ${lightShift}% / .88)`;
   });
 }
 
