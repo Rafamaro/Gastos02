@@ -1,17 +1,1 @@
-name: Deploy Coolify
 
-on:
-  push:
-    branches: ["main"]
-
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Trigger deploy
-        run: |
-          set -e
-          echo "Triggering deploy..."
-          curl -i --fail --show-error --silent \
-            -H "Authorization: Bearer ${{ secrets.COOLIFY_TOKEN }}" \
-            "${{ secrets.COOLIFY_URL }}/webhooks/v1/deploy?uuid=${{ secrets.COOLIFY_UUID }}&force=true"
