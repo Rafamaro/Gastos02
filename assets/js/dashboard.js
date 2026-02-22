@@ -31,6 +31,7 @@ export function initDashboard(state){
   el("dashScope").addEventListener("change", ()=> refreshDash(state));
   el("dashCatsMode").addEventListener("change", ()=> refreshDash(state));
   el("dashAgg").addEventListener("change", ()=> refreshDash(state));
+  el("dashMonthlyWindow").addEventListener("change", ()=> refreshDash(state));
 
   refreshDash(state);
 }
@@ -137,21 +138,22 @@ function renderCharts(state, list, month, byCatExpense, byCatIncome, byPay){
   }
   const netByDay = incByDay.map((v,i)=> v - expByDay[i]);
 
+  const monthlyWindow = Number(el("dashMonthlyWindow").value || 6);
+  const monthlyMetrics = buildMonthlyComparisonMetrics(state.tx, config, month, monthlyWindow);
+  const monthlyBreakdown = buildMonthlyBreakdownMetrics(state.tx, config, monthlyMetrics.months, el("dashAgg").value);
+
   if(!hasChart){
-    el("fallbackDaily").style.display = "";
-    el("fallbackCats").style.display = "";
-    el("fallbackPay").style.display = "";
-    el("fallbackDaily").textContent = "Charts no disponibles (offline).";
-    el("fallbackCats").textContent = "Charts no disponibles (offline).";
-    el("fallbackPay").textContent = "Charts no disponibles (offline).";
+    ["fallbackDaily", "fallbackMonthly", "fallbackCats", "fallbackMonthlyBreakdown", "fallbackPay"].forEach(id => {
+      el(id).style.display = "";
+      el(id).textContent = "Charts no disponibles (offline).";
+    });
     return;
-  } else {
-    el("fallbackDaily").style.display = "none";
-    el("fallbackCats").style.display = "none";
-    el("fallbackPay").style.display = "none";
   }
 
-  // destroy prev
+  ["fallbackDaily", "fallbackMonthly", "fallbackCats", "fallbackMonthlyBreakdown", "fallbackPay"].forEach(id => {
+    el(id).style.display = "none";
+  });
+
   for(const k of Object.keys(state.charts)){
     if(state.charts[k]){ state.charts[k].destroy(); state.charts[k]=null; }
   }
@@ -205,6 +207,30 @@ function renderCharts(state, list, month, byCatExpense, byCatIncome, byPay){
     }
   });
 
+  state.charts.monthly = new Chart(el("chartMonthlyCompare"), {
+    type: "line",
+    data: {
+      labels: monthlyMetrics.months,
+      datasets: [
+        { label: `Ingresos (${config.baseCurrency})`, data: monthlyMetrics.income, borderColor: "#22c55e", backgroundColor: "rgba(34,197,94,.2)", tension: .28, fill: false },
+        { label: `Gastos (${config.baseCurrency})`, data: monthlyMetrics.expense, borderColor: "#ef4444", backgroundColor: "rgba(239,68,68,.2)", tension: .28, fill: false },
+        { label: `Neto (${config.baseCurrency})`, data: monthlyMetrics.net, borderColor: "#8b5cf6", borderDash: [6,4], tension: .22, fill: false }
+      ]
+    },
+    options: {
+      responsive:true,
+      interaction: { mode: "index", intersect: false },
+      plugins: {
+        legend: { labels: { color:textColor, usePointStyle:true, boxWidth:10 } },
+        tooltip: { callbacks: { label: ctx => `${ctx.dataset.label}: ${fmtMoney(ctx.parsed.y || 0, config.baseCurrency, config)}` } }
+      },
+      scales: {
+        x: { grid: { color: borderColor }, ticks: { color: axisColor } },
+        y: { grid: { color: borderColor }, ticks: { color: axisColor } }
+      }
+    }
+  });
+
   const mode = el("dashCatsMode").value;
   const byCat = mode==="income" ? byCatIncome : byCatExpense;
   if(mode==="income") el("hCats").textContent = "Ingresos por categoría";
@@ -232,6 +258,37 @@ function renderCharts(state, list, month, byCatExpense, byCatIncome, byPay){
       plugins: {
         legend: { labels: { color:textColor } },
         tooltip: { callbacks: { label: ctx => `${ctx.label}: ${fmtMoney(ctx.parsed || 0, config.baseCurrency, config)}` } }
+      }
+    }
+  });
+
+  const breakdownTitle = el("dashAgg").value === "group" ? "Gastos por grupo (comparativa)" : "Gastos por categoría (comparativa)";
+  el("hMonthlyBreakdown").textContent = breakdownTitle;
+  const breakdownPalette = buildPalette(monthlyBreakdown.labels.length, "expense");
+  state.charts.monthlyBreakdown = new Chart(el("chartMonthlyBreakdown"), {
+    type: "bar",
+    data: {
+      labels: monthlyBreakdown.months,
+      datasets: monthlyBreakdown.labels.map((label, idx)=>(
+        {
+          label,
+          data: monthlyBreakdown.series.map(row=>Number((row[label] || 0).toFixed(2))),
+          backgroundColor: breakdownPalette[idx],
+          borderColor: breakdownPalette[idx],
+          borderWidth: 1,
+          borderRadius: 6
+        }
+      ))
+    },
+    options: {
+      responsive:true,
+      plugins: {
+        legend: { labels: { color:textColor } },
+        tooltip: { callbacks: { label: ctx => `${ctx.dataset.label}: ${fmtMoney(ctx.parsed.y || 0, config.baseCurrency, config)}` } }
+      },
+      scales: {
+        x: { stacked: true, grid: { color: borderColor }, ticks: { color: axisColor } },
+        y: { stacked: true, grid: { color: borderColor }, ticks: { color: axisColor } }
       }
     }
   });
@@ -266,6 +323,69 @@ function renderCharts(state, list, month, byCatExpense, byCatIncome, byPay){
       }
     }
   });
+}
+
+function buildMonthlyComparisonMetrics(txList, config, month, monthsBack){
+  const [year, monthNum] = month.split("-").map(Number);
+  const current = new Date(year, monthNum - 1, 1);
+  const months = [];
+
+  for(let idx = monthsBack - 1; idx >= 0; idx--){
+    const d = new Date(current.getFullYear(), current.getMonth() - idx, 1);
+    months.push(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2, "0")}`);
+  }
+
+  const totals = new Map(months.map(key => [key, { income: 0, expense: 0 }]));
+
+  for(const tx of txList){
+    const txMonth = String(tx.date || "").slice(0, 7);
+    if(!totals.has(txMonth)) continue;
+    const amountBase = toBase(Number(tx.amount) || 0, tx.currency, config);
+    if(tx.type === "income" && !isReentryTransfer(tx)) totals.get(txMonth).income += amountBase;
+    if(tx.type === "expense") totals.get(txMonth).expense += amountBase;
+  }
+
+  const income = months.map(key => Number((totals.get(key)?.income || 0).toFixed(2)));
+  const expense = months.map(key => Number((totals.get(key)?.expense || 0).toFixed(2)));
+  const net = months.map((key, i) => Number(((income[i] || 0) - (expense[i] || 0)).toFixed(2)));
+
+  return { months, income, expense, net };
+}
+
+function buildMonthlyBreakdownMetrics(txList, config, monthKeys, aggMode){
+  const monthMap = new Map(monthKeys.map(key => [key, new Map()]));
+
+  for(const tx of txList){
+    if(tx.type !== "expense") continue;
+    const month = String(tx.date || "").slice(0, 7);
+    const bucket = monthMap.get(month);
+    if(!bucket) continue;
+    const key = expenseKeyFromAgg(tx, config, aggMode);
+    bucket.set(key, (bucket.get(key) || 0) + toBase(Number(tx.amount) || 0, tx.currency, config));
+  }
+
+  const labels = Array.from(monthMap.values())
+    .flatMap(map => Array.from(map.entries()))
+    .reduce((acc, [key, value]) => {
+      acc.set(key, (acc.get(key) || 0) + value);
+      return acc;
+    }, new Map());
+
+  const topLabels = Array.from(labels.entries())
+    .sort((a,b)=> b[1] - a[1])
+    .slice(0, 5)
+    .map(([key])=> key);
+
+  const series = monthKeys.map(month => {
+    const row = {};
+    const data = monthMap.get(month) || new Map();
+    for(const label of topLabels){
+      row[label] = data.get(label) || 0;
+    }
+    return row;
+  });
+
+  return { months: monthKeys, labels: topLabels, series };
 }
 
 function buildPalette(size, theme){
