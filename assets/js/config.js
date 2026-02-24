@@ -23,10 +23,13 @@ export function initConfig(state){
 
   el("btnDirectusTest")?.addEventListener("click", async ()=>{
     try{
+      const directusUrl = readInputValue("directusUrl").trim();
+      const directusServiceEmail = readInputValue("directusServiceEmail").trim();
+      const directusServicePassword = readInputValue("directusServicePassword");
       setDirectusSettings({
-        baseUrl: el("directusUrl")?.value?.trim() || "",
-        serviceEmail: el("directusServiceEmail")?.value?.trim() || "",
-        servicePassword: el("directusServicePassword")?.value || ""
+        baseUrl: directusUrl,
+        serviceEmail: directusServiceEmail,
+        servicePassword: directusServicePassword
       });
       await pingDirectus();
       toast("Conexión Directus OK ✅");
@@ -41,16 +44,22 @@ export function initConfig(state){
 
   el("btnImportDirectus")?.addEventListener("click", async ()=>{
     const progress = el("directusImportProgress");
-    progress.textContent = "Importando…";
+    if(progress) progress.textContent = "Importando…";
     try{
-      await importLocalDataToDirectus((done, total, label)=>{ progress.textContent = `${done}/${total} · ${label}`; });
-      progress.textContent = "Importación finalizada ✅";
+      await importLocalDataToDirectus((done, total, label)=>{ if(progress) progress.textContent = `${done}/${total} · ${label}`; });
+      if(progress) progress.textContent = "Importación finalizada ✅";
       toast("Importado a Directus ✅");
     }catch(err){
-      progress.textContent = "Importación fallida";
+      if(progress) progress.textContent = "Importación fallida";
       toast(err.message || "Error de importación", "danger");
     }
   });
+}
+
+function readInputValue(id){
+  const node = el(id);
+  if(!node || !("value" in node)) return "";
+  return String(node.value || "");
 }
 
 function renderDirectusSettings(){
