@@ -13,15 +13,15 @@ function groupBudgetKey(group){ return `${GROUP_BUDGET_PREFIX}${group}`; }
 export function initConfig(state){
   state.bus.on("config:refresh", ()=>{ renderRates(state); renderCategoryGrouping(state); renderBudgetTable(state); renderDirectusSettings(); });
 
-  el("btnSaveConfig").addEventListener("click", ()=> saveConfigFromUI(state));
-  el("btnResetConfig").addEventListener("click", ()=> location.reload());
+  el("btnSaveConfig")?.addEventListener("click", ()=> saveConfigFromUI(state));
+  el("btnResetConfig")?.addEventListener("click", ()=> location.reload());
 
-  el("btnLoadBudgets").addEventListener("click", ()=> renderBudgetTable(state));
-  el("btnSaveBudgets").addEventListener("click", ()=> saveBudgetsFromUI(state));
-  el("budgetMonth").addEventListener("change", ()=> renderBudgetTable(state));
-  el("budgetMode").addEventListener("change", ()=> renderBudgetTable(state));
+  el("btnLoadBudgets")?.addEventListener("click", ()=> renderBudgetTable(state));
+  el("btnSaveBudgets")?.addEventListener("click", ()=> saveBudgetsFromUI(state));
+  el("budgetMonth")?.addEventListener("change", ()=> renderBudgetTable(state));
+  el("budgetMode")?.addEventListener("change", ()=> renderBudgetTable(state));
 
-  el("btnDirectusTest").addEventListener("click", async ()=>{
+  el("btnDirectusTest")?.addEventListener("click", async ()=>{
     try{
       setDirectusSettings({
         baseUrl: el("directusUrl")?.value?.trim() || "",
@@ -33,13 +33,13 @@ export function initConfig(state){
     }catch(err){ toast(err.message || "No se pudo conectar", "danger"); }
   });
 
-  el("useDirectus").addEventListener("change", ()=>{
+  el("useDirectus")?.addEventListener("change", ()=>{
     setBackendMode(el("useDirectus").checked ? "directus" : "local");
     toast("Backend actualizado. Recargando…", "warn");
     setTimeout(()=> location.reload(), 400);
   });
 
-  el("btnImportDirectus").addEventListener("click", async ()=>{
+  el("btnImportDirectus")?.addEventListener("click", async ()=>{
     const progress = el("directusImportProgress");
     progress.textContent = "Importando…";
     try{
