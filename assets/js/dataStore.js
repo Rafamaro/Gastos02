@@ -59,7 +59,7 @@ function budgetRowsToLocal(rows){
 export async function getSettings(){
   if(!isDirectus()) return loadConfig();
 
-  const [settings] = await getItems("settings", { limit: 1, fields: ["*", "base_currency.code"] });
+  const [settings] = await getItems("settings", { limit: 1, fields: ["id", "locale", "base_currency.code"] });
   const currencies = await listCurrencies();
   const cats = await getItems("categories", { fields: ["id","name","type","group.id","group.name"] });
   const groups = await getItems("expense_groups", { fields: ["id","name","description"] });
@@ -94,12 +94,12 @@ export async function saveSettings(payload){
 
 export async function listCurrencies(){
   if(!isDirectus()) return (loadConfig().currencies || []).map(code => ({ code }));
-  return getItems("currencies", { sort: ["code"] });
+  return getItems("currencies", { sort: "code", fields: ["code"] });
 }
 
 export async function listGroups(){
   if(!isDirectus()) return (loadConfig().expenseGroups || []).map(name => ({ id:name, name, description:"" }));
-  return getItems("expense_groups", { sort: ["name"] });
+  return getItems("expense_groups", { sort: "name", fields: ["id", "name", "description"] });
 }
 
 export async function createGroup({ name, description }){
@@ -127,7 +127,7 @@ export async function listCategories({ type } = {}){
     return type ? local.filter(x=>x.type===type) : local;
   }
   const filter = type ? { type: { _eq: type } } : undefined;
-  return getItems("categories", { filter, sort: ["name"], fields:["id","name","type","group.id","group.name"] });
+  return getItems("categories", { filter, sort: "name", fields:["id","name","type","group.id","group.name"] });
 }
 
 export async function createCategory({ name, type, group }){
@@ -166,8 +166,8 @@ export async function listTransactions(filters = {}){
   if(filters.month) queryFilter.date = { _starts_with: filters.month };
   return getItems("transactions", {
     filter: Object.keys(queryFilter).length ? queryFilter : undefined,
-    sort: ["-date"],
-    fields: ["*","currency.code","category.id","category.name"]
+    sort: "-date",
+    fields: ["id","type","date","amount","currency.code","category.id","category.name","pay","vendor","desc","notes","tags"]
   }).then(rows => rows.map(x => normalizeTx({
     id: x.id,
     type: x.type,
@@ -251,7 +251,7 @@ export async function listBudgets({ month } = {}){
 
   return getItems("budgets", {
     filter: month ? { month: { _eq: month } } : undefined,
-    fields: ["*", "category.id", "category.name", "category.type", "currency.code"]
+    fields: ["id", "month", "amount", "category.id", "category.name", "category.type", "currency.code"]
   });
 }
 
