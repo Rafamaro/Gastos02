@@ -24,7 +24,10 @@ const TOKEN_KEYS = {
 
 export function setDirectusConfig({ baseUrl, serviceEmail, servicePassword } = {}){
   if(typeof baseUrl === "string" && baseUrl.trim()){
-    const nextBaseUrl = baseUrl.trim().replace(/\/$/, "");
+    // Aceptar URLs sin esquema (ej: "directus.dominio.com")
+    const raw = baseUrl.trim();
+    const withScheme = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+    const nextBaseUrl = withScheme.replace(/\/$/, "");
     if(nextBaseUrl !== cfg.baseUrl){
       cfg.baseUrl = nextBaseUrl;
       clearSession();
@@ -58,8 +61,8 @@ function buildHeaders(extra = {}){
 }
 
 function saveTokens({ access, refresh, email } = {}){
-  const safeAccess = typeof access === "string" ? access : "";
-  const safeRefresh = typeof refresh === "string" ? refresh : "";
+  const safeAccess = cleanToken(access);
+  const safeRefresh = cleanToken(refresh);
   cfg.accessToken = safeAccess;
   cfg.refreshToken = safeRefresh;
   if(safeAccess) localStorage.setItem(TOKEN_KEYS.access, safeAccess);
@@ -71,8 +74,8 @@ function saveTokens({ access, refresh, email } = {}){
 
 function loadTokens(){
   return {
-    access: localStorage.getItem(TOKEN_KEYS.access),
-    refresh: localStorage.getItem(TOKEN_KEYS.refresh),
+    access: cleanToken(localStorage.getItem(TOKEN_KEYS.access)),
+    refresh: cleanToken(localStorage.getItem(TOKEN_KEYS.refresh)),
     email: localStorage.getItem(TOKEN_KEYS.email)
   };
 }
@@ -95,6 +98,19 @@ export function getSessionStatus(){
     email: tokens.email || "",
     connected: Boolean(tokens.access || tokens.refresh)
   };
+}
+
+function cleanToken(value){
+  if(typeof value !== "string") return "";
+  const t = value.trim();
+  if(!t) return "";
+  // defensivo: evitar tokens corruptos guardados como strings
+  if(t === "undefined" || t === "null" || t === "false") return "";
+  return t;
+}
+
+function hasServiceCreds(){
+  return Boolean(cfg.serviceEmail && cfg.servicePassword);
 }
 
 async function sleep(ms){
@@ -171,7 +187,16 @@ async function request(path, options = {}){
           await refresh();
           return await execute();
         }catch(_refreshErr){
+          // Si falla el refresh, intentamos reloguear con credenciales de servicio (si están guardadas)
           clearTokens();
+          if(hasServiceCreds()){
+            try{
+              await login(cfg.serviceEmail, cfg.servicePassword);
+              return await execute();
+            }catch(_loginErr){
+              // sigue al bloque de error estándar
+            }
+          }
           const authErr = new Error("AUTH_REQUIRED");
           authErr.status = 401;
           authErr.code = "AUTH_REQUIRED";
@@ -204,6 +229,17 @@ async function ensureAuth(){
     }catch(_err){
       clearTokens();
       return { ok: false, reason: "refresh_failed" };
+    }
+  }
+
+  // Auto-login con credenciales guardadas (modo "usuario de servicio")
+  if(hasServiceCreds()){
+    try{
+      await login(cfg.serviceEmail, cfg.servicePassword);
+      return { ok: true, source: "service_login" };
+    }catch(_err){
+      clearTokens();
+      return { ok: false, reason: "login_failed" };
     }
   }
 
@@ -303,7 +339,8 @@ function toQuery(params = {}){
 }
 
 export async function ping(){
-  return request("/server/ping", { method: "GET" });
+  // /server/ping es público en Directus (no requiere auth)
+  return request("/server/ping", { method: "GET", requiresAuth: false });
 }
 
 export async function getItems(collection, params = {}){
