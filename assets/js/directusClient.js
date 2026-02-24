@@ -2,23 +2,23 @@ const DEFAULT_BASE_URL = "https://directus.drperez86.com";
 const RETRY_DELAYS = [300, 900];
 const DIRECTUS_SERVICE_EMAIL_KEY = "gastos02_directus_service_email";
 const DIRECTUS_SERVICE_PASSWORD_KEY = "gastos02_directus_service_password";
-const DIRECTUS_ACCESS_TOKEN_KEY = "gastos02_directus_access_token";
-const DIRECTUS_REFRESH_TOKEN_KEY = "gastos02_directus_refresh_token";
+const LS_ACCESS = "gastos02_directus_access_token";
+const LS_REFRESH = "gastos02_directus_refresh_token";
 const DIRECTUS_USER_EMAIL_KEY = "gastos02_directus_user_email";
 
 const cfg = {
   baseUrl: localStorage.getItem("gastos02_directus_url") || DEFAULT_BASE_URL,
   serviceEmail: window.__GASTOS02_DIRECTUS_SERVICE_EMAIL || localStorage.getItem(DIRECTUS_SERVICE_EMAIL_KEY) || "",
   servicePassword: window.__GASTOS02_DIRECTUS_SERVICE_PASSWORD || localStorage.getItem(DIRECTUS_SERVICE_PASSWORD_KEY) || "",
-  accessToken: localStorage.getItem(DIRECTUS_ACCESS_TOKEN_KEY) || "",
-  refreshToken: localStorage.getItem(DIRECTUS_REFRESH_TOKEN_KEY) || "",
+  accessToken: localStorage.getItem(LS_ACCESS) || "",
+  refreshToken: localStorage.getItem(LS_REFRESH) || "",
   loginPromise: null,
   refreshPromise: null
 };
 
 const TOKEN_KEYS = {
-  access: DIRECTUS_ACCESS_TOKEN_KEY,
-  refresh: DIRECTUS_REFRESH_TOKEN_KEY,
+  access: LS_ACCESS,
+  refresh: LS_REFRESH,
   email: DIRECTUS_USER_EMAIL_KEY
 };
 
@@ -57,7 +57,7 @@ function buildHeaders(extra = {}){
   return headers;
 }
 
-function saveTokens(access, refresh, email){
+function saveTokens({ access, refresh, email } = {}){
   const safeAccess = typeof access === "string" ? access : "";
   const safeRefresh = typeof refresh === "string" ? refresh : "";
   cfg.accessToken = safeAccess;
@@ -127,53 +127,59 @@ function normalizeUrlForDirectus(rawUrl){
 }
 
 async function request(path, options = {}){
-  const auth = await ensureAuth();
-  if(!auth.ok){
-    const err = new Error("No conectado a Directus. Iniciá sesión para continuar.");
-    err.status = 401;
-    err.code = "DIRECTUS_AUTH_REQUIRED";
-    err.userMessage = "No conectado a Directus. Iniciá sesión para continuar.";
-    throw err;
+  const requiresAuth = options.requiresAuth !== false;
+  if(requiresAuth){
+    const auth = await ensureAuth();
+    if(!auth.ok){
+      const err = new Error("AUTH_REQUIRED");
+      err.status = 401;
+      err.code = "AUTH_REQUIRED";
+      err.userMessage = "No conectado a Directus. Iniciá sesión para continuar.";
+      throw err;
+    }
   }
 
   const url = normalizeUrlForDirectus(`${cfg.baseUrl}${path}`);
-  let lastErr;
-  let didRefresh = false;
 
+  const execute = async ()=>{
+    const res = await fetch(url, {
+      ...options,
+      headers: buildHeaders(options.headers)
+    });
+    const data = await res.json().catch(() => ({}));
+    if(!res.ok){
+      const msg = data?.errors?.[0]?.message || `${res.status} ${res.statusText}`;
+      const err = new Error(`Directus error en ${path}: ${msg}`);
+      err.status = res.status;
+      if(res.status === 401){
+        err.code = "AUTH_REQUIRED";
+        err.userMessage = "Sesión expirada. Iniciá sesión nuevamente.";
+      }
+      if(res.status === 403) err.userMessage = "Sin permisos en Directus (403). Revisá el rol del usuario.";
+      throw err;
+    }
+    return data;
+  };
+
+  let lastErr;
   for(let attempt = 0; attempt <= RETRY_DELAYS.length; attempt++){
     try{
-      const res = await fetch(url, {
-        ...options,
-        headers: buildHeaders(options.headers)
-      });
-      if(res.status === 401 && !didRefresh){
-        didRefresh = true;
+      return await execute();
+    }catch(err){
+      if(err?.status === 401){
         try{
           await refresh();
-        }catch(_err){
+          return await execute();
+        }catch(_refreshErr){
           clearTokens();
-          const authErr = new Error("Sesión expirada. Iniciá sesión nuevamente.");
+          const authErr = new Error("AUTH_REQUIRED");
           authErr.status = 401;
-          authErr.code = "DIRECTUS_AUTH_REQUIRED";
+          authErr.code = "AUTH_REQUIRED";
           authErr.userMessage = "Sesión expirada. Iniciá sesión nuevamente.";
           throw authErr;
         }
-        continue;
       }
-      const data = await res.json().catch(() => ({}));
-      if(!res.ok){
-        const msg = data?.errors?.[0]?.message || `${res.status} ${res.statusText}`;
-        const err = new Error(`Directus error en ${path}: ${msg}`);
-        err.status = res.status;
-        if(res.status === 401) err.userMessage = "Sesión expirada. Iniciá sesión nuevamente.";
-        if(res.status === 403) err.userMessage = "Sin permisos en Directus (403). Revisá el rol del usuario.";
-        throw err;
-      }
-      return data;
-    }catch(err){
-      if(err?.status === 401 || err?.status === 403){
-        throw err;
-      }
+      if(err?.status === 403) throw err;
       lastErr = err;
       const networkError = err instanceof TypeError;
       if(!networkError || attempt >= RETRY_DELAYS.length) break;
@@ -185,31 +191,28 @@ async function request(path, options = {}){
 }
 
 async function ensureAuth(){
-  const tokens = loadTokens();
-  if(cfg.accessToken || tokens.access) return { ok: true, connected: true, source: "access_token" };
+  const { access, refresh: refreshToken } = loadTokens();
+  if(access){
+    cfg.accessToken = access;
+    return { ok: true, access };
+  }
 
-  if(tokens.refresh){
+  if(refreshToken){
     try{
       await refresh();
-      return { ok: true, connected: true, source: "refresh" };
+      return { ok: true };
     }catch(_err){
       clearTokens();
-      return { ok: false, connected: false, reason: "refresh_failed" };
+      return { ok: false, reason: "refresh_failed" };
     }
   }
 
-  if(cfg.serviceEmail && cfg.servicePassword){
-    await login(cfg.serviceEmail, cfg.servicePassword, { force: true });
-    return { ok: true, connected: true, source: "auto_login" };
-  }
-  return { ok: false, connected: false, reason: "missing_session" };
+  return { ok: false, reason: "missing_session" };
 }
 
 export { ensureAuth };
 
-export async function login(email, password, { force = false } = {}){
-  if(!force && cfg.accessToken) return cfg.accessToken;
-  if(force) cfg.accessToken = "";
+export async function login(email, password){
   if(cfg.loginPromise) return cfg.loginPromise;
 
   const safeEmail = typeof email === "string" ? email.trim() : "";
@@ -229,13 +232,13 @@ export async function login(email, password, { force = false } = {}){
         const msg = data?.errors?.[0]?.message || `${res.status} ${res.statusText}`;
         throw new Error(`No se pudo autenticar en Directus: ${msg}`);
       }
-      const token = data?.data?.access_token;
+      const accessToken = data?.data?.access_token;
       const refreshToken = data?.data?.refresh_token;
-      if(!token) throw new Error("Directus no devolvió access_token.");
-      saveTokens(token, refreshToken, safeEmail);
+      if(!accessToken) throw new Error("Directus no devolvió access_token.");
+      saveTokens({ access: accessToken, refresh: refreshToken, email: safeEmail });
       cfg.serviceEmail = safeEmail;
       cfg.servicePassword = safePassword;
-      return token;
+      return data.data;
     })
     .finally(()=>{ cfg.loginPromise = null; });
 
@@ -268,7 +271,7 @@ export async function refresh(){
         clearTokens();
         throw new Error("Sesión expirada. Iniciá sesión nuevamente.");
       }
-      saveTokens(nextAccessToken, nextRefreshToken);
+      saveTokens({ access: nextAccessToken, refresh: nextRefreshToken });
       return nextAccessToken;
     })
     .finally(()=>{ cfg.refreshPromise = null; });

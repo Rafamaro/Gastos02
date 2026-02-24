@@ -47,8 +47,8 @@ export function initConfig(state){
       await loginDirectus(email, password);
       setBackendMode("directus");
       renderDirectusSession();
-      toast(`Conectado como ${email} ✅. Cargando datos remotos…`);
-      setTimeout(()=> location.reload(), 300);
+      state.bus.emit("directus:reload_remote");
+      toast("Conectado ✅", "ok");
     }catch(err){ toast(err.userMessage || err.message || "No se pudo iniciar sesión", "danger"); }
   });
 
@@ -90,6 +90,7 @@ function renderDirectusSettings(){
   const emailInput = el("directusAccountEmail");
   const passwordInput = el("directusAccountPassword");
   const useDirectus = el("useDirectus");
+  if(!urlInput && !emailInput && !passwordInput && !useDirectus) return;
   if(urlInput) urlInput.value = directus.baseUrl;
   if(emailInput) emailInput.value = directus.serviceEmail || "";
   if(passwordInput) passwordInput.value = directus.servicePassword || "";
