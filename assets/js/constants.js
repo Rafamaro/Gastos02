@@ -1,4 +1,4 @@
-export const APP_VERSION = "1.24";
+export const APP_VERSION = "1.25";
 // Constantes y defaults (v2)
 export const LS = {
   TX: "mov_tx_v2",

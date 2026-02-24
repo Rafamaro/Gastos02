@@ -39,10 +39,35 @@ async function sleep(ms){
   await new Promise(resolve => setTimeout(resolve, ms));
 }
 
+
+function normalizeListParam(value){
+  if(Array.isArray(value)) return value.map(item => String(item));
+  if(typeof value !== "string") return null;
+  const trimmed = value.trim();
+  if(!trimmed.startsWith("[") || !trimmed.endsWith("]")) return null;
+  try{
+    const parsed = JSON.parse(trimmed);
+    if(!Array.isArray(parsed)) return null;
+    return parsed.map(item => String(item));
+  }catch(_err){
+    return null;
+  }
+}
+
+function normalizeUrlForDirectus(rawUrl){
+  const url = new URL(rawUrl);
+  ["fields", "sort"].forEach(key => {
+    const current = url.searchParams.get(key);
+    const normalized = normalizeListParam(current);
+    if(normalized) url.searchParams.set(key, normalized.join(","));
+  });
+  return url.toString();
+}
+
 async function request(path, options = {}){
   await ensureAuth();
 
-  const url = `${cfg.baseUrl}${path}`;
+  const url = normalizeUrlForDirectus(`${cfg.baseUrl}${path}`);
   let lastErr;
   let didRelogin = false;
 
@@ -117,8 +142,9 @@ function toQuery(params = {}){
   const qs = new URLSearchParams();
   Object.entries(params).forEach(([k,v])=>{
     if(v == null) return;
-    if(Array.isArray(v)){
-      qs.set(k, v.map(item => String(item)).join(","));
+    const normalizedList = normalizeListParam(v);
+    if(normalizedList){
+      qs.set(k, normalizedList.join(","));
       return;
     }
     if(typeof v === "object"){
