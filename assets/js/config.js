@@ -23,7 +23,11 @@ export function initConfig(state){
 
   el("btnDirectusTest").addEventListener("click", async ()=>{
     try{
-      setDirectusSettings({ baseUrl: el("directusUrl").value.trim(), token: el("directusToken").value.trim() });
+      setDirectusSettings({
+        baseUrl: el("directusUrl")?.value?.trim() || "",
+        serviceEmail: el("directusServiceEmail")?.value?.trim() || "",
+        servicePassword: el("directusServicePassword")?.value || ""
+      });
       await pingDirectus();
       toast("Conexión Directus OK ✅");
     }catch(err){ toast(err.message || "No se pudo conectar", "danger"); }
@@ -51,9 +55,14 @@ export function initConfig(state){
 
 function renderDirectusSettings(){
   const directus = getDirectusConfig();
-  el("directusUrl").value = directus.baseUrl;
-  el("directusToken").value = directus.token;
-  el("useDirectus").checked = getBackendMode() === "directus";
+  const urlInput = el("directusUrl");
+  const emailInput = el("directusServiceEmail");
+  const passwordInput = el("directusServicePassword");
+  const useDirectus = el("useDirectus");
+  if(urlInput) urlInput.value = directus.baseUrl;
+  if(emailInput) emailInput.value = directus.serviceEmail || "";
+  if(passwordInput) passwordInput.value = directus.servicePassword || "";
+  if(useDirectus) useDirectus.checked = getBackendMode() === "directus";
 }
 
 export function renderRates(state){
