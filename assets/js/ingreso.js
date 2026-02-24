@@ -1,5 +1,5 @@
 import { el, fillSelect, fmtMoney, toBase, safeTags, normalizeTx, sortTx, todayISO, monthISO, toast, escapeHTML } from "./utils.js";
-import { saveTransactions } from "./storage.js";
+import { createTransaction, updateTransaction, deleteTransaction } from "./dataStore.js";
 
 export function initIngreso(state){
   // listeners de refresco externo
@@ -146,7 +146,7 @@ export function clearForm(state){
   toast("Formulario limpio");
 }
 
-export function addTx(state){
+export async function addTx(state){
   const config = state.config;
   const amount = Number(el("fAmount").value);
   if(!Number.isFinite(amount) || amount<=0){
@@ -169,8 +169,8 @@ export function addTx(state){
     notes: el("fNotes").value.trim(),
   }, config);
 
-  state.tx.push(x);
-  saveTransactions(state.tx);
+  const saved = await createTransaction(x);
+  state.tx.unshift({ ...x, id: saved?.id || x.id });
 
   toast("Guardado ✅");
   clearForm(state);
@@ -295,7 +295,7 @@ export function openEdit(state, txId){
   el("dlgEdit").showModal();
 }
 
-export function saveEdit(state){
+export async function saveEdit(state){
   const config = state.config;
   const idv = el("eId").value;
   const idx = state.tx.findIndex(e => e.id === idv);
@@ -321,8 +321,8 @@ export function saveEdit(state){
     notes: el("eNotes").value.trim(),
   }, config);
 
+  await updateTransaction(idv, updated);
   state.tx[idx] = updated;
-  saveTransactions(state.tx);
   el("dlgEdit").close();
 
   toast("Cambios guardados ✅");
@@ -332,15 +332,15 @@ export function saveEdit(state){
   state.bus.emit("dashboard:refresh");
 }
 
-export function deleteEdit(state){
+export async function deleteEdit(state){
   const idv = el("eId").value;
   const x = state.tx.find(e => e.id === idv);
   if(!x) return;
 
   if(!confirm("¿Eliminar este movimiento?")) return;
 
+  await deleteTransaction(idv);
   state.tx = state.tx.filter(e => e.id !== idv);
-  saveTransactions(state.tx);
   el("dlgEdit").close();
 
   toast("Eliminado", "warn");

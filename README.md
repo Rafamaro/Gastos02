@@ -10,14 +10,49 @@ Aplicación web (SPA) para registrar movimientos de ingresos/gastos, evaluarlos 
 - Configuración de moneda base, tasas de cambio y categorías.
 - Exportación/Importación de JSON y exportación CSV.
 - Persistencia local en navegador (`localStorage`) con migración de datos v1 a v2.
+- Backend dual: modo local + modo Directus (CRUD persistente).
+
+## Integración con Directus
+
+1. Ir a **Config → Directus**.
+2. Cargar `Directus URL` (por defecto `https://directus.drperez86.com`) y token.
+3. Presionar **Probar conexión**.
+4. Activar **Usar Directus** para que Directus sea fuente de verdad.
+5. Opcional: usar **Importar a Directus** para subir datos locales actuales.
+
+### Feature flags / storage local
+
+- `gastos02_backend = "local" | "directus"`
+- `gastos02_directus_url`
+- `gastos02_directus_token`
+
+### Colecciones utilizadas y mapeo
+
+- `settings`:
+  - `base_currency` ↔ `config.baseCurrency`
+  - `locale` ↔ `config.locale`
+- `currencies`:
+  - `code`, `symbol`, `decimals`, `name`
+- `expense_groups`:
+  - `name`, `description`
+- `categories`:
+  - `name`, `type`, `group`
+- `transactions`:
+  - `type`, `date`, `amount`, `currency`, `category`, `vendor`, `pay`, `desc`, `notes`, `tags`
+- `budgets`:
+  - `month`, `category`, `amount`, `currency`
+
+> Nota: presupuestos por grupo se guardan como categoría técnica con prefijo `[GRUPO] ` para mantener compatibilidad con el esquema existente.
 
 ## Estructura
 
 - `index.html`: layout principal de vistas (Ingreso, Dashboard, Config).
+- `assets/js/directusClient.js`: cliente REST Directus + retries.
+- `assets/js/dataStore.js`: data layer unificado con modo local/directus.
 - `assets/js/app.js`: inicialización del estado y módulos.
 - `assets/js/ingreso.js`: formulario, filtros y listado de movimientos.
 - `assets/js/dashboard.js`: KPIs, gráficos y tabla de presupuesto.
-- `assets/js/config.js`: configuración general y presupuestos.
+- `assets/js/config.js`: configuración general, directus y presupuestos.
 - `assets/js/export.js`: export/import, CSV, tema y reset.
 - `assets/js/storage.js`: lectura/escritura en `localStorage` + migraciones.
 - `assets/js/router.js`: navegación entre tabs.
@@ -25,8 +60,6 @@ Aplicación web (SPA) para registrar movimientos de ingresos/gastos, evaluarlos 
 ## Ejecutar localmente
 
 No requiere build. Abrí `index.html` en tu navegador o levantá un servidor estático.
-
-Ejemplo con Python:
 
 ```bash
 python3 -m http.server 8080
@@ -38,18 +71,9 @@ Luego visitá:
 http://localhost:8080
 ```
 
-## Calidad y validación rápida
+## Validación manual sugerida
 
-Este repo no incluye test runner automático. Para validar rápido:
-
-1. Crear un gasto y un ingreso.
-2. Filtrar por tipo/categoría/fecha y verificar paginación.
-3. Editar y eliminar un movimiento.
-4. Confirmar dashboard (KPIs + presupuesto).
-5. Exportar e importar JSON.
-
-## Mejoras sugeridas
-
-- Agregar tests unitarios para `utils.js` y tests E2E para flujos críticos.
-- Backend opcional para sincronización multi-dispositivo.
-- Observabilidad de errores (ej. reporter remoto opcional).
+1. Activar modo Directus con token válido.
+2. Crear grupo/categoría/movimiento/presupuesto y verificar persistencia.
+3. Recargar página y confirmar lectura desde Directus.
+4. Desactivar Directus o dejar token vacío y confirmar fallback local sin crash.
