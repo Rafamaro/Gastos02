@@ -117,8 +117,15 @@ function toQuery(params = {}){
   const qs = new URLSearchParams();
   Object.entries(params).forEach(([k,v])=>{
     if(v == null) return;
-    if(typeof v === "object") qs.set(k, JSON.stringify(v));
-    else qs.set(k, String(v));
+    if(Array.isArray(v)){
+      qs.set(k, v.map(item => String(item)).join(","));
+      return;
+    }
+    if(typeof v === "object"){
+      qs.set(k, JSON.stringify(v));
+      return;
+    }
+    qs.set(k, String(v));
   });
   const q = qs.toString();
   return q ? `?${q}` : "";

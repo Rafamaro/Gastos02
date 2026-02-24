@@ -21,7 +21,7 @@ Aplicación web (SPA) para registrar movimientos de ingresos/gastos, evaluarlos 
 
 1. Ir a **Config → Directus**.
 2. Cargar `Directus URL` (por defecto `https://directus.drperez86.com`).
-3. Asegurar credenciales del usuario de servicio vía `window.__GASTOS02_DIRECTUS_SERVICE_EMAIL` y `window.__GASTOS02_DIRECTUS_SERVICE_PASSWORD`.
+3. Cargar credenciales del usuario de servicio (`Email usuario servicio` y `Password usuario servicio`) o inyectarlas vía `window.__GASTOS02_DIRECTUS_SERVICE_EMAIL` / `window.__GASTOS02_DIRECTUS_SERVICE_PASSWORD`.
 4. Presionar **Probar conexión**.
 5. Activar **Usar Directus** para que Directus sea fuente de verdad.
 6. Opcional: usar **Importar a Directus** para subir datos locales actuales.
