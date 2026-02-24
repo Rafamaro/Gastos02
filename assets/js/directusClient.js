@@ -100,7 +100,7 @@ export async function upsertByUnique(collection, uniqueField, value, payload){
   return createItem(collection, { ...payload, [uniqueField]: value });
 }
 
-const directusClient = {
+export const directusClient = {
   setDirectusConfig,
   ping,
   getItems,
