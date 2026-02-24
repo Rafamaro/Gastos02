@@ -1,5 +1,6 @@
 const DEFAULT_BASE_URL = "https://directus.drperez86.com";
 const RETRY_DELAYS = [300, 900];
+const DIRECTUS_SERVICE_EMAIL_KEY = "gastos02_directus_service_email";
 
 const cfg = {
   baseUrl: localStorage.getItem("gastos02_directus_url") || DEFAULT_BASE_URL,
