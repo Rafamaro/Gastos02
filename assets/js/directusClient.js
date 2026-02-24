@@ -16,6 +16,12 @@ const cfg = {
   refreshPromise: null
 };
 
+const TOKEN_KEYS = {
+  access: DIRECTUS_ACCESS_TOKEN_KEY,
+  refresh: DIRECTUS_REFRESH_TOKEN_KEY,
+  email: DIRECTUS_USER_EMAIL_KEY
+};
+
 export function setDirectusConfig({ baseUrl, serviceEmail, servicePassword } = {}){
   if(typeof baseUrl === "string" && baseUrl.trim()){
     const nextBaseUrl = baseUrl.trim().replace(/\/$/, "");
@@ -45,37 +51,49 @@ export function setDirectusConfig({ baseUrl, serviceEmail, servicePassword } = {
 
 function buildHeaders(extra = {}){
   const headers = { "Content-Type": "application/json", ...extra };
-  const accessToken = localStorage.getItem(DIRECTUS_ACCESS_TOKEN_KEY) || cfg.accessToken;
+  const { access } = loadTokens();
+  const accessToken = access || cfg.accessToken;
   if(accessToken) headers.Authorization = `Bearer ${accessToken}`;
   return headers;
 }
 
-function saveTokens({ accessToken, refreshToken, email } = {}){
-  if(typeof accessToken === "string" && accessToken){
-    cfg.accessToken = accessToken;
-    localStorage.setItem(DIRECTUS_ACCESS_TOKEN_KEY, accessToken);
-  }
-  if(typeof refreshToken === "string" && refreshToken){
-    cfg.refreshToken = refreshToken;
-    localStorage.setItem(DIRECTUS_REFRESH_TOKEN_KEY, refreshToken);
-  }
-  if(typeof email === "string" && email){
-    localStorage.setItem(DIRECTUS_USER_EMAIL_KEY, email.trim());
-  }
+function saveTokens(access, refresh, email){
+  const safeAccess = typeof access === "string" ? access : "";
+  const safeRefresh = typeof refresh === "string" ? refresh : "";
+  cfg.accessToken = safeAccess;
+  cfg.refreshToken = safeRefresh;
+  if(safeAccess) localStorage.setItem(TOKEN_KEYS.access, safeAccess);
+  else localStorage.removeItem(TOKEN_KEYS.access);
+  if(safeRefresh) localStorage.setItem(TOKEN_KEYS.refresh, safeRefresh);
+  else localStorage.removeItem(TOKEN_KEYS.refresh);
+  if(typeof email === "string" && email.trim()) localStorage.setItem(TOKEN_KEYS.email, email.trim());
+}
+
+function loadTokens(){
+  return {
+    access: localStorage.getItem(TOKEN_KEYS.access),
+    refresh: localStorage.getItem(TOKEN_KEYS.refresh),
+    email: localStorage.getItem(TOKEN_KEYS.email)
+  };
+}
+
+function clearTokens(){
+  cfg.accessToken = "";
+  cfg.refreshToken = "";
+  localStorage.removeItem(TOKEN_KEYS.access);
+  localStorage.removeItem(TOKEN_KEYS.refresh);
+  localStorage.removeItem(TOKEN_KEYS.email);
 }
 
 export function clearSession(){
-  cfg.accessToken = "";
-  cfg.refreshToken = "";
-  localStorage.removeItem(DIRECTUS_ACCESS_TOKEN_KEY);
-  localStorage.removeItem(DIRECTUS_REFRESH_TOKEN_KEY);
-  localStorage.removeItem(DIRECTUS_USER_EMAIL_KEY);
+  clearTokens();
 }
 
 export function getSessionStatus(){
+  const tokens = loadTokens();
   return {
-    email: localStorage.getItem(DIRECTUS_USER_EMAIL_KEY) || "",
-    connected: Boolean(localStorage.getItem(DIRECTUS_ACCESS_TOKEN_KEY) || localStorage.getItem(DIRECTUS_REFRESH_TOKEN_KEY))
+    email: tokens.email || "",
+    connected: Boolean(tokens.access || tokens.refresh)
   };
 }
 
@@ -113,7 +131,7 @@ async function request(path, options = {}){
 
   const url = normalizeUrlForDirectus(`${cfg.baseUrl}${path}`);
   let lastErr;
-  let didRelogin = false;
+  let didRefresh = false;
 
   for(let attempt = 0; attempt <= RETRY_DELAYS.length; attempt++){
     try{
@@ -121,8 +139,8 @@ async function request(path, options = {}){
         ...options,
         headers: buildHeaders(options.headers)
       });
-      if(res.status === 401 && !didRelogin){
-        didRelogin = true;
+      if(res.status === 401 && !didRefresh){
+        didRefresh = true;
         await refresh();
         continue;
       }
@@ -151,17 +169,30 @@ async function request(path, options = {}){
 }
 
 async function ensureAuth(){
-  if(localStorage.getItem(DIRECTUS_ACCESS_TOKEN_KEY)) return;
-  if(localStorage.getItem(DIRECTUS_REFRESH_TOKEN_KEY)){
-    await refresh();
-    return;
+  const tokens = loadTokens();
+  if(cfg.accessToken || tokens.access) return { connected: true, source: "access_token" };
+
+  if(tokens.refresh){
+    try{
+      await refresh();
+      return { connected: true, source: "refresh" };
+    }catch(_err){
+      // fallback to autologin
+    }
   }
+
   if(cfg.serviceEmail && cfg.servicePassword){
     await login(cfg.serviceEmail, cfg.servicePassword, { force: true });
-    return;
+    return { connected: true, source: "auto_login" };
   }
-  throw new Error("No conectado a Directus. Iniciá sesión para continuar.");
+
+  const err = new Error("No conectado a Directus. Iniciá sesión para continuar.");
+  err.status = 401;
+  err.userMessage = "No conectado a Directus. Iniciá sesión para continuar.";
+  throw err;
 }
+
+export { ensureAuth };
 
 export async function login(email, password, { force = false } = {}){
   if(!force && cfg.accessToken) return cfg.accessToken;
@@ -188,7 +219,7 @@ export async function login(email, password, { force = false } = {}){
       const token = data?.data?.access_token;
       const refreshToken = data?.data?.refresh_token;
       if(!token) throw new Error("Directus no devolvió access_token.");
-      saveTokens({ accessToken: token, refreshToken, email: safeEmail });
+      saveTokens(token, refreshToken, safeEmail);
       cfg.serviceEmail = safeEmail;
       cfg.servicePassword = safePassword;
       return token;
@@ -200,7 +231,7 @@ export async function login(email, password, { force = false } = {}){
 
 export async function refresh(){
   if(cfg.refreshPromise) return cfg.refreshPromise;
-  const refreshToken = localStorage.getItem(DIRECTUS_REFRESH_TOKEN_KEY) || cfg.refreshToken;
+  const { refresh: refreshToken } = loadTokens();
   if(!refreshToken) throw new Error("Sesión expirada. Iniciá sesión nuevamente.");
 
   cfg.refreshPromise = fetch(`${cfg.baseUrl}/auth/refresh`, {
@@ -211,7 +242,7 @@ export async function refresh(){
     .then(async res => {
       const data = await res.json().catch(() => ({}));
       if(!res.ok){
-        clearSession();
+        clearTokens();
         const msg = data?.errors?.[0]?.message || `${res.status} ${res.statusText}`;
         const err = new Error(`Sesión expirada: ${msg}`);
         err.status = res.status;
@@ -221,10 +252,10 @@ export async function refresh(){
       const nextAccessToken = data?.data?.access_token;
       const nextRefreshToken = data?.data?.refresh_token || refreshToken;
       if(!nextAccessToken){
-        clearSession();
+        clearTokens();
         throw new Error("Sesión expirada. Iniciá sesión nuevamente.");
       }
-      saveTokens({ accessToken: nextAccessToken, refreshToken: nextRefreshToken });
+      saveTokens(nextAccessToken, nextRefreshToken);
       return nextAccessToken;
     })
     .finally(()=>{ cfg.refreshPromise = null; });
@@ -302,7 +333,8 @@ export const directusClient = {
   updateItem,
   deleteItem,
   findOneByFilter,
-  upsertByUnique
+  upsertByUnique,
+  ensureAuth
 };
 
 if(typeof window !== "undefined"){

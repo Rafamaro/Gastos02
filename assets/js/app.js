@@ -6,7 +6,17 @@ import { initIngreso } from "./ingreso.js";
 import { initDashboard } from "./dashboard.js";
 import { initConfig } from "./config.js";
 import { initExport } from "./export.js";
-import { getSettings, listTransactions, listBudgets, syncBudgetMapFromRows, getBackendMode, listCurrencies, listGroups, listCategories } from "./dataStore.js";
+import {
+  getSettings,
+  listTransactions,
+  listBudgets,
+  syncBudgetMapFromRows,
+  getBackendMode,
+  listCurrencies,
+  listGroups,
+  listCategories,
+  ensureDirectusSession
+} from "./dataStore.js";
 
 function makeBus(){
   return {
@@ -29,23 +39,16 @@ const state = {
 async function init(){
   setTheme(getTheme());
 
-  state.config = await safelyLoad("configuración", () => getSettings(), structuredClone(defaults));
   if(getBackendMode() === "directus"){
-    await safelyLoad("catálogos Directus", async ()=>{
-      const [currencies, groups, categories] = await Promise.all([
-        listCurrencies(),
-        listGroups(),
-        listCategories()
-      ]);
-      state.config.currencies = currencies.map(x => x.code);
-      state.config.expenseGroups = groups.map(x => x.name);
-      state.config.expenseCategories = categories.filter(x => x.type === "expense").map(x => x.name);
-      state.config.incomeCategories = categories.filter(x => x.type === "income").map(x => x.name);
-    }, null);
+    try{
+      await ensureDirectusSession();
+    }catch(err){
+      renderLoginUI(err);
+      return;
+    }
   }
-  state.tx = await safelyLoad("movimientos", () => listTransactions(), []);
-  state.budgetRows = await safelyLoad("presupuestos", () => listBudgets(), []);
-  state.budgets = syncBudgetMapFromRows(state.budgetRows);
+
+  await safelyLoadData();
 
   el("fDate").value = todayISO();
   el("dashMonth").value = monthISO();
@@ -77,6 +80,35 @@ async function init(){
   state.bus.emit("dashboard:refresh");
   state.bus.emit("ingreso:refresh");
   state.bus.emit("config:refresh");
+}
+
+async function safelyLoadData(){
+  const loadedSettings = await safelyLoad("configuración", () => getSettings(), null);
+  state.config = loadedSettings || structuredClone(defaults);
+
+  if(getBackendMode() === "directus"){
+    await safelyLoad("catálogos Directus", async ()=>{
+      const [currencies, groups, categories] = await Promise.all([
+        listCurrencies(),
+        listGroups(),
+        listCategories()
+      ]);
+      state.config.currencies = currencies.map(x => x.code);
+      state.config.expenseGroups = groups.map(x => x.name);
+      state.config.expenseCategories = categories.filter(x => x.type === "expense").map(x => x.name);
+      state.config.incomeCategories = categories.filter(x => x.type === "income").map(x => x.name);
+    }, null);
+  }
+  state.tx = await safelyLoad("movimientos", () => listTransactions(), []);
+  state.budgetRows = await safelyLoad("presupuestos", () => listBudgets(), []);
+  state.budgets = syncBudgetMapFromRows(state.budgetRows);
+}
+
+function renderLoginUI(err){
+  const message = err?.userMessage || "No conectado a Directus. Iniciá sesión para continuar.";
+  toast(message, "warn");
+  const statusNode = el("directus-session-state") || el("directusSessionState");
+  if(statusNode) statusNode.textContent = "No conectado";
 }
 
 async function safelyLoad(label, fn, fallback){

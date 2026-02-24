@@ -11,6 +11,7 @@ import {
   findOneByFilter,
   upsertByUnique,
   login as directusLogin,
+  ensureAuth,
   clearSession,
   getSessionStatus
 } from "./directusClient.js";
@@ -70,25 +71,29 @@ function budgetRowsToLocal(rows){
 
 export async function getSettings(){
   if(!isDirectus()) return loadConfig();
+  try{
+    const [settings] = await getItems("settings", { limit: 1, fields: ["id", "locale", "base_currency.code"] });
+    if(!settings){
+      await createItem("settings", { base_currency: defaults.baseCurrency, locale: defaults.locale });
+    }
+    const settingRow = settings || (await getItems("settings", { limit: 1, fields: ["id", "locale", "base_currency.code"] }))[0];
+    const currencies = await listCurrencies();
+    const cats = await getItems("categories", { fields: ["id","name","type","group.id","group.name"] });
+    const groups = await getItems("expense_groups", { fields: ["id","name","description"] });
 
-  const [settings] = await getItems("settings", { limit: 1, fields: ["id", "locale", "base_currency.code"] });
-  if(!settings){
-    await createItem("settings", { base_currency: defaults.baseCurrency, locale: defaults.locale });
+    return mergeConfig({
+      baseCurrency: settingRow?.base_currency?.code || defaults.baseCurrency,
+      locale: settingRow?.locale || defaults.locale,
+      currencies: currencies.map(x=>x.code),
+      expenseCategories: cats.filter(x=>x.type==="expense").map(x=>x.name),
+      incomeCategories: cats.filter(x=>x.type==="income").map(x=>x.name),
+      expenseGroups: groups.map(x=>x.name),
+      expenseCategoryGroups: categoryToGroupMap(cats)
+    });
+  }catch(err){
+    console.warn("No se pudieron cargar settings", err);
+    return null;
   }
-  const settingRow = settings || (await getItems("settings", { limit: 1, fields: ["id", "locale", "base_currency.code"] }))[0];
-  const currencies = await listCurrencies();
-  const cats = await getItems("categories", { fields: ["id","name","type","group.id","group.name"] });
-  const groups = await getItems("expense_groups", { fields: ["id","name","description"] });
-
-  return mergeConfig({
-    baseCurrency: settingRow?.base_currency?.code || defaults.baseCurrency,
-    locale: settingRow?.locale || defaults.locale,
-    currencies: currencies.map(x=>x.code),
-    expenseCategories: cats.filter(x=>x.type==="expense").map(x=>x.name),
-    incomeCategories: cats.filter(x=>x.type==="income").map(x=>x.name),
-    expenseGroups: groups.map(x=>x.name),
-    expenseCategoryGroups: categoryToGroupMap(cats)
-  });
 }
 
 export async function saveSettings(payload){
@@ -310,6 +315,11 @@ export function logoutDirectus(){
 
 export function getDirectusSession(){
   return getSessionStatus();
+}
+
+export async function ensureDirectusSession(){
+  if(!isDirectus()) return { connected: true, source: "local" };
+  return ensureAuth();
 }
 
 export async function importLocalDataToDirectus(onProgress){
