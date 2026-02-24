@@ -2,7 +2,8 @@ import { el, fillSelect, monthISO, escapeHTML, toast } from "./utils.js";
 import {
   saveSettings, createGroup, createCategory, listBudgets, upsertBudget,
   getBackendMode, setBackendMode, getDirectusConfig, setDirectusSettings,
-  pingDirectus, importLocalDataToDirectus, syncBudgetMapFromRows
+  pingDirectus, importLocalDataToDirectus, syncBudgetMapFromRows,
+  loginDirectus, logoutDirectus, getDirectusSession
 } from "./dataStore.js";
 
 const GROUP_BUDGET_PREFIX = "__group__::";
@@ -24,16 +25,31 @@ export function initConfig(state){
   el("btnDirectusTest")?.addEventListener("click", async ()=>{
     try{
       const directusUrl = readInputValue("directusUrl").trim();
-      const directusServiceEmail = readInputValue("directusServiceEmail").trim();
-      const directusServicePassword = readInputValue("directusServicePassword");
       setDirectusSettings({
         baseUrl: directusUrl,
-        serviceEmail: directusServiceEmail,
-        servicePassword: directusServicePassword
+        serviceEmail: readInputValue("directusAccountEmail").trim(),
+        servicePassword: readInputValue("directusAccountPassword")
       });
       await pingDirectus();
       toast("Conexión Directus OK ✅");
-    }catch(err){ toast(err.message || "No se pudo conectar", "danger"); }
+    }catch(err){ toast(err.userMessage || err.message || "No se pudo conectar", "danger"); }
+  });
+
+  el("btnDirectusLogin")?.addEventListener("click", async ()=>{
+    try{
+      const email = readInputValue("directusAccountEmail").trim();
+      const password = readInputValue("directusAccountPassword");
+      await loginDirectus(email, password);
+      setDirectusSettings({ serviceEmail: email, servicePassword: password });
+      renderDirectusSession();
+      toast(`Conectado como ${email} ✅`);
+    }catch(err){ toast(err.userMessage || err.message || "No se pudo iniciar sesión", "danger"); }
+  });
+
+  el("btnDirectusLogout")?.addEventListener("click", ()=>{
+    logoutDirectus();
+    renderDirectusSession();
+    toast("Sesión cerrada.", "warn");
   });
 
   el("useDirectus")?.addEventListener("change", ()=>{
@@ -65,13 +81,23 @@ function readInputValue(id){
 function renderDirectusSettings(){
   const directus = getDirectusConfig();
   const urlInput = el("directusUrl");
-  const emailInput = el("directusServiceEmail");
-  const passwordInput = el("directusServicePassword");
+  const emailInput = el("directusAccountEmail");
+  const passwordInput = el("directusAccountPassword");
   const useDirectus = el("useDirectus");
   if(urlInput) urlInput.value = directus.baseUrl;
   if(emailInput) emailInput.value = directus.serviceEmail || "";
   if(passwordInput) passwordInput.value = directus.servicePassword || "";
   if(useDirectus) useDirectus.checked = getBackendMode() === "directus";
+  renderDirectusSession();
+}
+
+function renderDirectusSession(){
+  const node = el("directusSessionState");
+  if(!node) return;
+  const session = getDirectusSession();
+  node.textContent = session.connected && session.email
+    ? `Conectado como ${session.email}`
+    : "No conectado";
 }
 
 export function renderRates(state){
