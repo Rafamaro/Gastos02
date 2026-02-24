@@ -117,6 +117,7 @@ export function wipeAll(){
   localStorage.removeItem("gastos02_directus_token");
   localStorage.removeItem("gastos02_directus_url");
   localStorage.removeItem("gastos02_directus_service_email");
+  localStorage.removeItem("gastos02_directus_service_password");
 
   toast("Datos borrados. Recargando…", "warn");
   setTimeout(()=> location.reload(), 600);

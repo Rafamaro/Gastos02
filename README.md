@@ -30,6 +30,8 @@ Aplicación web (SPA) para registrar movimientos de ingresos/gastos, evaluarlos 
 
 - `gastos02_backend = "local" | "directus"`
 - `gastos02_directus_url`
+- `gastos02_directus_service_email`
+- `gastos02_directus_service_password`
 
 ### Colecciones utilizadas y mapeo
 
