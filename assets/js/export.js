@@ -115,6 +115,8 @@ export function wipeAll(){
   localStorage.removeItem("mov_bud_v2");
   localStorage.removeItem("gastos02_backend");
   localStorage.removeItem("gastos02_directus_token");
+  localStorage.removeItem("gastos02_directus_access_token");
+  localStorage.removeItem("gastos02_directus_refresh_token");
   localStorage.removeItem("gastos02_directus_url");
   localStorage.removeItem("gastos02_directus_service_email");
   localStorage.removeItem("gastos02_directus_service_password");

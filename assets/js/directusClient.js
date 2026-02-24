@@ -127,7 +127,14 @@ function normalizeUrlForDirectus(rawUrl){
 }
 
 async function request(path, options = {}){
-  await ensureAuth();
+  const auth = await ensureAuth();
+  if(!auth.ok){
+    const err = new Error("No conectado a Directus. Iniciá sesión para continuar.");
+    err.status = 401;
+    err.code = "DIRECTUS_AUTH_REQUIRED";
+    err.userMessage = "No conectado a Directus. Iniciá sesión para continuar.";
+    throw err;
+  }
 
   const url = normalizeUrlForDirectus(`${cfg.baseUrl}${path}`);
   let lastErr;
@@ -141,7 +148,16 @@ async function request(path, options = {}){
       });
       if(res.status === 401 && !didRefresh){
         didRefresh = true;
-        await refresh();
+        try{
+          await refresh();
+        }catch(_err){
+          clearTokens();
+          const authErr = new Error("Sesión expirada. Iniciá sesión nuevamente.");
+          authErr.status = 401;
+          authErr.code = "DIRECTUS_AUTH_REQUIRED";
+          authErr.userMessage = "Sesión expirada. Iniciá sesión nuevamente.";
+          throw authErr;
+        }
         continue;
       }
       const data = await res.json().catch(() => ({}));
@@ -170,26 +186,23 @@ async function request(path, options = {}){
 
 async function ensureAuth(){
   const tokens = loadTokens();
-  if(cfg.accessToken || tokens.access) return { connected: true, source: "access_token" };
+  if(cfg.accessToken || tokens.access) return { ok: true, connected: true, source: "access_token" };
 
   if(tokens.refresh){
     try{
       await refresh();
-      return { connected: true, source: "refresh" };
+      return { ok: true, connected: true, source: "refresh" };
     }catch(_err){
-      // fallback to autologin
+      clearTokens();
+      return { ok: false, connected: false, reason: "refresh_failed" };
     }
   }
 
   if(cfg.serviceEmail && cfg.servicePassword){
     await login(cfg.serviceEmail, cfg.servicePassword, { force: true });
-    return { connected: true, source: "auto_login" };
+    return { ok: true, connected: true, source: "auto_login" };
   }
-
-  const err = new Error("No conectado a Directus. Iniciá sesión para continuar.");
-  err.status = 401;
-  err.userMessage = "No conectado a Directus. Iniciá sesión para continuar.";
-  throw err;
+  return { ok: false, connected: false, reason: "missing_session" };
 }
 
 export { ensureAuth };
