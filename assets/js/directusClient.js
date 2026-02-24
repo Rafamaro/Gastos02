@@ -2,37 +2,81 @@ const DEFAULT_BASE_URL = "https://directus.drperez86.com";
 const RETRY_DELAYS = [300, 900];
 const DIRECTUS_SERVICE_EMAIL_KEY = "gastos02_directus_service_email";
 const DIRECTUS_SERVICE_PASSWORD_KEY = "gastos02_directus_service_password";
+const DIRECTUS_ACCESS_TOKEN_KEY = "gastos02_directus_access_token";
+const DIRECTUS_REFRESH_TOKEN_KEY = "gastos02_directus_refresh_token";
+const DIRECTUS_USER_EMAIL_KEY = "gastos02_directus_user_email";
 
 const cfg = {
   baseUrl: localStorage.getItem("gastos02_directus_url") || DEFAULT_BASE_URL,
   serviceEmail: window.__GASTOS02_DIRECTUS_SERVICE_EMAIL || localStorage.getItem(DIRECTUS_SERVICE_EMAIL_KEY) || "",
   servicePassword: window.__GASTOS02_DIRECTUS_SERVICE_PASSWORD || localStorage.getItem(DIRECTUS_SERVICE_PASSWORD_KEY) || "",
-  accessToken: "",
-  loginPromise: null
+  accessToken: localStorage.getItem(DIRECTUS_ACCESS_TOKEN_KEY) || "",
+  refreshToken: localStorage.getItem(DIRECTUS_REFRESH_TOKEN_KEY) || "",
+  loginPromise: null,
+  refreshPromise: null
 };
 
 export function setDirectusConfig({ baseUrl, serviceEmail, servicePassword } = {}){
   if(typeof baseUrl === "string" && baseUrl.trim()){
-    cfg.baseUrl = baseUrl.trim().replace(/\/$/, "");
-    cfg.accessToken = "";
-    localStorage.setItem("gastos02_directus_url", cfg.baseUrl);
+    const nextBaseUrl = baseUrl.trim().replace(/\/$/, "");
+    if(nextBaseUrl !== cfg.baseUrl){
+      cfg.baseUrl = nextBaseUrl;
+      clearSession();
+      localStorage.setItem("gastos02_directus_url", cfg.baseUrl);
+    }
   }
   if(typeof serviceEmail === "string"){
-    cfg.serviceEmail = serviceEmail.trim();
-    cfg.accessToken = "";
-    localStorage.setItem(DIRECTUS_SERVICE_EMAIL_KEY, cfg.serviceEmail);
+    const nextEmail = serviceEmail.trim();
+    if(nextEmail !== cfg.serviceEmail){
+      cfg.serviceEmail = nextEmail;
+      clearSession();
+      localStorage.setItem(DIRECTUS_SERVICE_EMAIL_KEY, cfg.serviceEmail);
+    }
   }
   if(typeof servicePassword === "string"){
-    cfg.servicePassword = servicePassword;
-    cfg.accessToken = "";
-    localStorage.setItem(DIRECTUS_SERVICE_PASSWORD_KEY, cfg.servicePassword);
+    const nextPassword = servicePassword;
+    if(nextPassword !== cfg.servicePassword){
+      cfg.servicePassword = nextPassword;
+      clearSession();
+      localStorage.setItem(DIRECTUS_SERVICE_PASSWORD_KEY, cfg.servicePassword);
+    }
   }
 }
 
 function buildHeaders(extra = {}){
   const headers = { "Content-Type": "application/json", ...extra };
-  if(cfg.accessToken) headers.Authorization = `Bearer ${cfg.accessToken}`;
+  const accessToken = localStorage.getItem(DIRECTUS_ACCESS_TOKEN_KEY) || cfg.accessToken;
+  if(accessToken) headers.Authorization = `Bearer ${accessToken}`;
   return headers;
+}
+
+function saveTokens({ accessToken, refreshToken, email } = {}){
+  if(typeof accessToken === "string" && accessToken){
+    cfg.accessToken = accessToken;
+    localStorage.setItem(DIRECTUS_ACCESS_TOKEN_KEY, accessToken);
+  }
+  if(typeof refreshToken === "string" && refreshToken){
+    cfg.refreshToken = refreshToken;
+    localStorage.setItem(DIRECTUS_REFRESH_TOKEN_KEY, refreshToken);
+  }
+  if(typeof email === "string" && email){
+    localStorage.setItem(DIRECTUS_USER_EMAIL_KEY, email.trim());
+  }
+}
+
+export function clearSession(){
+  cfg.accessToken = "";
+  cfg.refreshToken = "";
+  localStorage.removeItem(DIRECTUS_ACCESS_TOKEN_KEY);
+  localStorage.removeItem(DIRECTUS_REFRESH_TOKEN_KEY);
+  localStorage.removeItem(DIRECTUS_USER_EMAIL_KEY);
+}
+
+export function getSessionStatus(){
+  return {
+    email: localStorage.getItem(DIRECTUS_USER_EMAIL_KEY) || "",
+    connected: Boolean(localStorage.getItem(DIRECTUS_ACCESS_TOKEN_KEY) || localStorage.getItem(DIRECTUS_REFRESH_TOKEN_KEY))
+  };
 }
 
 async function sleep(ms){
@@ -79,16 +123,23 @@ async function request(path, options = {}){
       });
       if(res.status === 401 && !didRelogin){
         didRelogin = true;
-        await login(cfg.serviceEmail, cfg.servicePassword, { force: true });
+        await refresh();
         continue;
       }
       const data = await res.json().catch(() => ({}));
       if(!res.ok){
         const msg = data?.errors?.[0]?.message || `${res.status} ${res.statusText}`;
-        throw new Error(`Directus error en ${path}: ${msg}`);
+        const err = new Error(`Directus error en ${path}: ${msg}`);
+        err.status = res.status;
+        if(res.status === 401) err.userMessage = "Sesión expirada. Iniciá sesión nuevamente.";
+        if(res.status === 403) err.userMessage = "Sin permisos en Directus (403). Revisá el rol del usuario.";
+        throw err;
       }
       return data;
     }catch(err){
+      if(err?.status === 401 || err?.status === 403){
+        throw err;
+      }
       lastErr = err;
       const networkError = err instanceof TypeError;
       if(!networkError || attempt >= RETRY_DELAYS.length) break;
@@ -100,8 +151,16 @@ async function request(path, options = {}){
 }
 
 async function ensureAuth(){
-  if(cfg.accessToken) return;
-  await login(cfg.serviceEmail, cfg.servicePassword);
+  if(localStorage.getItem(DIRECTUS_ACCESS_TOKEN_KEY)) return;
+  if(localStorage.getItem(DIRECTUS_REFRESH_TOKEN_KEY)){
+    await refresh();
+    return;
+  }
+  if(cfg.serviceEmail && cfg.servicePassword){
+    await login(cfg.serviceEmail, cfg.servicePassword, { force: true });
+    return;
+  }
+  throw new Error("No conectado a Directus. Iniciá sesión para continuar.");
 }
 
 export async function login(email, password, { force = false } = {}){
@@ -127,8 +186,9 @@ export async function login(email, password, { force = false } = {}){
         throw new Error(`No se pudo autenticar en Directus: ${msg}`);
       }
       const token = data?.data?.access_token;
+      const refreshToken = data?.data?.refresh_token;
       if(!token) throw new Error("Directus no devolvió access_token.");
-      cfg.accessToken = token;
+      saveTokens({ accessToken: token, refreshToken, email: safeEmail });
       cfg.serviceEmail = safeEmail;
       cfg.servicePassword = safePassword;
       return token;
@@ -138,10 +198,48 @@ export async function login(email, password, { force = false } = {}){
   return cfg.loginPromise;
 }
 
+export async function refresh(){
+  if(cfg.refreshPromise) return cfg.refreshPromise;
+  const refreshToken = localStorage.getItem(DIRECTUS_REFRESH_TOKEN_KEY) || cfg.refreshToken;
+  if(!refreshToken) throw new Error("Sesión expirada. Iniciá sesión nuevamente.");
+
+  cfg.refreshPromise = fetch(`${cfg.baseUrl}/auth/refresh`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ refresh_token: refreshToken })
+  })
+    .then(async res => {
+      const data = await res.json().catch(() => ({}));
+      if(!res.ok){
+        clearSession();
+        const msg = data?.errors?.[0]?.message || `${res.status} ${res.statusText}`;
+        const err = new Error(`Sesión expirada: ${msg}`);
+        err.status = res.status;
+        err.userMessage = "Sesión expirada. Iniciá sesión nuevamente.";
+        throw err;
+      }
+      const nextAccessToken = data?.data?.access_token;
+      const nextRefreshToken = data?.data?.refresh_token || refreshToken;
+      if(!nextAccessToken){
+        clearSession();
+        throw new Error("Sesión expirada. Iniciá sesión nuevamente.");
+      }
+      saveTokens({ accessToken: nextAccessToken, refreshToken: nextRefreshToken });
+      return nextAccessToken;
+    })
+    .finally(()=>{ cfg.refreshPromise = null; });
+
+  return cfg.refreshPromise;
+}
+
 function toQuery(params = {}){
   const qs = new URLSearchParams();
   Object.entries(params).forEach(([k,v])=>{
     if(v == null) return;
+    if((k === "fields" || k === "sort") && Array.isArray(v)){
+      qs.set(k, v.map(item => String(item)).join(","));
+      return;
+    }
     const normalizedList = normalizeListParam(v);
     if(normalizedList){
       qs.set(k, normalizedList.join(","));
@@ -194,6 +292,9 @@ export async function upsertByUnique(collection, uniqueField, value, payload){
 
 export const directusClient = {
   login,
+  refresh,
+  clearSession,
+  getSessionStatus,
   setDirectusConfig,
   ping,
   getItems,
