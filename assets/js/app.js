@@ -1,5 +1,5 @@
 import { el, monthISO, todayISO, fillSelect, toast } from "./utils.js";
-import { getTheme, setTheme } from "./storage.js";
+import { getTheme, setTheme, loadConfig, loadTransactions, loadBudgets } from "./storage.js";
 import { APP_VERSION, defaults } from "./constants.js";
 import { initTabs } from "./router.js";
 import { initIngreso } from "./ingreso.js";
@@ -33,19 +33,20 @@ const state = {
   budgets: {},
   page: 1,
   PAGE_SIZE: 12,
-  charts: { daily:null, monthly:null, cats:null, monthlyBreakdown:null, pay:null }
+  charts: { daily:null, monthly:null, cats:null, monthlyBreakdown:null, pay:null },
+  directus: { available: true }
 };
 
 async function init(){
   setTheme(getTheme());
 
   if(getBackendMode() === "directus"){
-    try{
-      await ensureDirectusSession();
-    }catch(err){
-      renderLoginUI(err);
-      return;
-    }
+    const session = await ensureDirectusSession();
+    state.directus = {
+      available: Boolean(session?.ok),
+      reason: session?.reason || ""
+    };
+    if(!state.directus.available) renderLoginUI();
   }
 
   await safelyLoadData();
@@ -83,6 +84,16 @@ async function init(){
 }
 
 async function safelyLoadData(){
+  const directusBlocked = getBackendMode() === "directus" && !state.directus.available;
+
+  if(directusBlocked){
+    state.config = loadConfig() || structuredClone(defaults);
+    state.tx = loadTransactions(state.config);
+    state.budgetRows = [];
+    state.budgets = loadBudgets();
+    return;
+  }
+
   const loadedSettings = await safelyLoad("configuración", () => getSettings(), null);
   state.config = loadedSettings || structuredClone(defaults);
 
@@ -104,17 +115,17 @@ async function safelyLoadData(){
   state.budgets = syncBudgetMapFromRows(state.budgetRows);
 }
 
-function renderLoginUI(err){
-  const message = err?.userMessage || "No conectado a Directus. Iniciá sesión para continuar.";
-  toast(message, "warn");
+function renderLoginUI(){
+  toast("Directus: no conectado. Se cargaron datos locales.", "warn");
   const statusNode = el("directus-session-state") || el("directusSessionState");
-  if(statusNode) statusNode.textContent = "No conectado";
+  if(statusNode) statusNode.textContent = "Directus: no conectado";
 }
 
 async function safelyLoad(label, fn, fallback){
   try{ return await fn(); }
   catch(err){
-    console.error(`Error al cargar ${label}`, err);
+    const authError = err?.code === "DIRECTUS_AUTH_REQUIRED" || err?.status === 401;
+    if(!authError) console.error(`Error al cargar ${label}`, err);
     toast(err.userMessage || `No se pudo cargar ${label}. Se usaron valores por defecto.`, "warn");
     return fallback;
   }

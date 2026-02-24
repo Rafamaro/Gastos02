@@ -45,8 +45,10 @@ export function initConfig(state){
         servicePassword: password
       });
       await loginDirectus(email, password);
+      setBackendMode("directus");
       renderDirectusSession();
-      toast(`Conectado como ${email} ✅`);
+      toast(`Conectado como ${email} ✅. Cargando datos remotos…`);
+      setTimeout(()=> location.reload(), 300);
     }catch(err){ toast(err.userMessage || err.message || "No se pudo iniciar sesión", "danger"); }
   });
 
@@ -100,8 +102,8 @@ function renderDirectusSession(){
   if(!node) return;
   const session = getDirectusSession();
   node.textContent = session.connected && session.email
-    ? `Conectado como ${session.email}`
-    : "No conectado";
+    ? `Directus: Conectado como ${session.email}`
+    : "Directus: No conectado";
 }
 
 export function renderRates(state){

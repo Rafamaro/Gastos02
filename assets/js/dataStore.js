@@ -318,7 +318,7 @@ export function getDirectusSession(){
 }
 
 export async function ensureDirectusSession(){
-  if(!isDirectus()) return { connected: true, source: "local" };
+  if(!isDirectus()) return { ok: true, connected: true, source: "local" };
   return ensureAuth();
 }
 
