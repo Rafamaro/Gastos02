@@ -306,7 +306,7 @@ export async function pingDirectus(){
 }
 
 export async function loginDirectus(email, password){
-  return directusLogin(email, password, { force: true });
+  return directusLogin(email, password);
 }
 
 export function logoutDirectus(){

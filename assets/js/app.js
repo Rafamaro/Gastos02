@@ -46,7 +46,10 @@ async function init(){
       available: Boolean(session?.ok),
       reason: session?.reason || ""
     };
-    if(!state.directus.available) renderLoginUI();
+    if(!state.directus.available){
+      renderLoginUI();
+      state.bus.emit("directus:auth_required");
+    }
   }
 
   await safelyLoadData();
@@ -77,6 +80,24 @@ async function init(){
   initDashboard(state);
   initConfig(state);
   initExport(state);
+
+  state.bus.on("directus:reload_remote", async ()=>{
+    try{
+      const session = await ensureDirectusSession();
+      if(!session?.ok){
+        renderLoginUI();
+        state.bus.emit("directus:auth_required");
+        return;
+      }
+      state.directus = { available: true, reason: "" };
+      await safelyLoadData();
+      state.bus.emit("dashboard:refresh");
+      state.bus.emit("ingreso:refresh");
+      state.bus.emit("config:refresh");
+    }catch(err){
+      toast(err.userMessage || err.message || "No se pudieron recargar datos remotos", "warn");
+    }
+  });
 
   state.bus.emit("dashboard:refresh");
   state.bus.emit("ingreso:refresh");
@@ -124,7 +145,7 @@ function renderLoginUI(){
 async function safelyLoad(label, fn, fallback){
   try{ return await fn(); }
   catch(err){
-    const authError = err?.code === "DIRECTUS_AUTH_REQUIRED" || err?.status === 401;
+    const authError = err?.code === "AUTH_REQUIRED" || err?.code === "DIRECTUS_AUTH_REQUIRED" || err?.status === 401;
     if(!authError) console.error(`Error al cargar ${label}`, err);
     toast(err.userMessage || `No se pudo cargar ${label}. Se usaron valores por defecto.`, "warn");
     return fallback;
