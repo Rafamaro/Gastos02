@@ -1,6 +1,6 @@
 import { el, monthISO, todayISO, fillSelect, toast } from "./utils.js";
 import { getTheme, setTheme } from "./storage.js";
-import { defaults } from "./constants.js";
+import { APP_VERSION, defaults } from "./constants.js";
 import { initTabs } from "./router.js";
 import { initIngreso } from "./ingreso.js";
 import { initDashboard } from "./dashboard.js";
@@ -39,6 +39,9 @@ async function init(){
   el("budgetMonth").value = monthISO();
   el("budgetMode").value = "category";
   el("pillMonth").textContent = "Mes: " + monthISO();
+
+  const versionBadge = el("appVersionBadge");
+  if(versionBadge) versionBadge.textContent = `Versión ${APP_VERSION}`;
 
   fillSelect(el("fCurrency"), state.config.currencies);
   fillSelect(el("eCurrency"), state.config.currencies);

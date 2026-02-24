@@ -12,6 +12,11 @@ Aplicación web (SPA) para registrar movimientos de ingresos/gastos, evaluarlos 
 - Persistencia local en navegador (`localStorage`) con migración de datos v1 a v2.
 - Backend dual: modo local + modo Directus (CRUD persistente).
 
+## Versionado
+
+- La versión visible en UI se incrementa en cada cambio siguiendo el esquema `1.21`, `1.22`, `1.23`, etc.
+- La fuente de verdad es `APP_VERSION` en `assets/js/constants.js` y se refleja en el badge del header.
+
 ## Integración con Directus
 
 1. Ir a **Config → Directus**.
