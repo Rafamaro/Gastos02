@@ -18,19 +18,28 @@ const cfg = {
 
 export function setDirectusConfig({ baseUrl, serviceEmail, servicePassword } = {}){
   if(typeof baseUrl === "string" && baseUrl.trim()){
-    cfg.baseUrl = baseUrl.trim().replace(/\/$/, "");
-    clearSession();
-    localStorage.setItem("gastos02_directus_url", cfg.baseUrl);
+    const nextBaseUrl = baseUrl.trim().replace(/\/$/, "");
+    if(nextBaseUrl !== cfg.baseUrl){
+      cfg.baseUrl = nextBaseUrl;
+      clearSession();
+      localStorage.setItem("gastos02_directus_url", cfg.baseUrl);
+    }
   }
   if(typeof serviceEmail === "string"){
-    cfg.serviceEmail = serviceEmail.trim();
-    clearSession();
-    localStorage.setItem(DIRECTUS_SERVICE_EMAIL_KEY, cfg.serviceEmail);
+    const nextEmail = serviceEmail.trim();
+    if(nextEmail !== cfg.serviceEmail){
+      cfg.serviceEmail = nextEmail;
+      clearSession();
+      localStorage.setItem(DIRECTUS_SERVICE_EMAIL_KEY, cfg.serviceEmail);
+    }
   }
   if(typeof servicePassword === "string"){
-    cfg.servicePassword = servicePassword;
-    clearSession();
-    localStorage.setItem(DIRECTUS_SERVICE_PASSWORD_KEY, cfg.servicePassword);
+    const nextPassword = servicePassword;
+    if(nextPassword !== cfg.servicePassword){
+      cfg.servicePassword = nextPassword;
+      clearSession();
+      localStorage.setItem(DIRECTUS_SERVICE_PASSWORD_KEY, cfg.servicePassword);
+    }
   }
 }
 
@@ -145,6 +154,10 @@ async function ensureAuth(){
   if(localStorage.getItem(DIRECTUS_ACCESS_TOKEN_KEY)) return;
   if(localStorage.getItem(DIRECTUS_REFRESH_TOKEN_KEY)){
     await refresh();
+    return;
+  }
+  if(cfg.serviceEmail && cfg.servicePassword){
+    await login(cfg.serviceEmail, cfg.servicePassword, { force: true });
     return;
   }
   throw new Error("No conectado a Directus. Iniciá sesión para continuar.");

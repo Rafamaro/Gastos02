@@ -39,8 +39,8 @@ export function initConfig(state){
     try{
       const email = readInputValue("directusAccountEmail").trim();
       const password = readInputValue("directusAccountPassword");
-      await loginDirectus(email, password);
       setDirectusSettings({ serviceEmail: email, servicePassword: password });
+      await loginDirectus(email, password);
       renderDirectusSession();
       toast(`Conectado como ${email} ✅`);
     }catch(err){ toast(err.userMessage || err.message || "No se pudo iniciar sesión", "danger"); }
