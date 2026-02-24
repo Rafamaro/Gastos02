@@ -3,23 +3,31 @@ const RETRY_DELAYS = [300, 900];
 
 const cfg = {
   baseUrl: localStorage.getItem("gastos02_directus_url") || DEFAULT_BASE_URL,
-  token: localStorage.getItem("gastos02_directus_token") || ""
+  serviceEmail: window.__GASTOS02_DIRECTUS_SERVICE_EMAIL || "",
+  servicePassword: window.__GASTOS02_DIRECTUS_SERVICE_PASSWORD || "",
+  accessToken: "",
+  loginPromise: null
 };
 
-export function setDirectusConfig({ baseUrl, token } = {}){
+export function setDirectusConfig({ baseUrl, serviceEmail, servicePassword } = {}){
   if(typeof baseUrl === "string" && baseUrl.trim()){
     cfg.baseUrl = baseUrl.trim().replace(/\/$/, "");
+    cfg.accessToken = "";
     localStorage.setItem("gastos02_directus_url", cfg.baseUrl);
   }
-  if(typeof token === "string"){
-    cfg.token = token.trim();
-    localStorage.setItem("gastos02_directus_token", cfg.token);
+  if(typeof serviceEmail === "string"){
+    cfg.serviceEmail = serviceEmail.trim();
+    cfg.accessToken = "";
+  }
+  if(typeof servicePassword === "string"){
+    cfg.servicePassword = servicePassword;
+    cfg.accessToken = "";
   }
 }
 
 function buildHeaders(extra = {}){
   const headers = { "Content-Type": "application/json", ...extra };
-  if(cfg.token) headers.Authorization = `Bearer ${cfg.token}`;
+  if(cfg.accessToken) headers.Authorization = `Bearer ${cfg.accessToken}`;
   return headers;
 }
 
@@ -28,8 +36,11 @@ async function sleep(ms){
 }
 
 async function request(path, options = {}){
+  await ensureAuth();
+
   const url = `${cfg.baseUrl}${path}`;
   let lastErr;
+  let didRelogin = false;
 
   for(let attempt = 0; attempt <= RETRY_DELAYS.length; attempt++){
     try{
@@ -37,6 +48,11 @@ async function request(path, options = {}){
         ...options,
         headers: buildHeaders(options.headers)
       });
+      if(res.status === 401 && !didRelogin){
+        didRelogin = true;
+        await login(cfg.serviceEmail, cfg.servicePassword, { force: true });
+        continue;
+      }
       const data = await res.json().catch(() => ({}));
       if(!res.ok){
         const msg = data?.errors?.[0]?.message || `${res.status} ${res.statusText}`;
@@ -52,6 +68,44 @@ async function request(path, options = {}){
   }
 
   throw new Error(`No se pudo conectar a Directus (${path}). ${lastErr?.message || "Error desconocido"}`);
+}
+
+async function ensureAuth(){
+  if(cfg.accessToken) return;
+  await login(cfg.serviceEmail, cfg.servicePassword);
+}
+
+export async function login(email, password, { force = false } = {}){
+  if(!force && cfg.accessToken) return cfg.accessToken;
+  if(cfg.loginPromise) return cfg.loginPromise;
+
+  const safeEmail = typeof email === "string" ? email.trim() : "";
+  const safePassword = typeof password === "string" ? password : "";
+  if(!safeEmail || !safePassword){
+    throw new Error("Faltan credenciales del usuario de servicio de Directus.");
+  }
+
+  cfg.loginPromise = fetch(`${cfg.baseUrl}/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email: safeEmail, password: safePassword })
+  })
+    .then(async res => {
+      const data = await res.json().catch(() => ({}));
+      if(!res.ok){
+        const msg = data?.errors?.[0]?.message || `${res.status} ${res.statusText}`;
+        throw new Error(`No se pudo autenticar en Directus: ${msg}`);
+      }
+      const token = data?.data?.access_token;
+      if(!token) throw new Error("Directus no devolvió access_token.");
+      cfg.accessToken = token;
+      cfg.serviceEmail = safeEmail;
+      cfg.servicePassword = safePassword;
+      return token;
+    })
+    .finally(()=>{ cfg.loginPromise = null; });
+
+  return cfg.loginPromise;
 }
 
 function toQuery(params = {}){
@@ -101,6 +155,7 @@ export async function upsertByUnique(collection, uniqueField, value, payload){
 }
 
 export const directusClient = {
+  login,
   setDirectusConfig,
   ping,
   getItems,
