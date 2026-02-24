@@ -213,15 +213,30 @@ export async function createTransaction(payload){
     return tx[tx.length - 1];
   }
 
-  const importId = payload?.tags?.import_id || payload?.notes?.match(/import_id:([^\s]+)/)?.[1];
+  // Idempotencia de import: guardamos/checamos import_id dentro de notes (string)
+  const importIdFromNotes = payload?.notes?.match(/import_id:([^\s]+)/)?.[1];
+  const importIdFromTagsObject = payload?.tags && typeof payload.tags === "object" && !Array.isArray(payload.tags)
+    ? payload.tags.import_id
+    : null;
+  const importIdFromTagsArray = Array.isArray(payload?.tags)
+    ? payload.tags.find(t => String(t).startsWith("import_id:"))?.slice("import_id:".length)
+    : null;
+  const importId = String(importIdFromNotes || importIdFromTagsObject || importIdFromTagsArray || "").trim();
   if(importId){
-    const existing = await findOneByFilter("transactions", { tags: { _contains: { import_id: importId } } });
+    const existing = await findOneByFilter("transactions", { notes: { _contains: `import_id:${importId}` } });
     if(existing) return existing;
   }
 
   const category = payload.category
     ? await createCategory({ name: payload.category, type: payload.type || "expense" })
     : null;
+  const tags = Array.isArray(payload.tags) ? payload.tags : [];
+  const notes = importId
+    ? (String(payload.notes || "").includes(`import_id:${importId}`)
+        ? String(payload.notes || "")
+        : `${String(payload.notes || "").trim()}${payload.notes ? "\n" : ""}import_id:${importId}`.trim())
+    : (payload.notes || "");
+
   return createItem("transactions", {
     type: payload.type,
     date: payload.date,
@@ -231,8 +246,8 @@ export async function createTransaction(payload){
     vendor: payload.vendor || "",
     pay: payload.pay || "",
     desc: payload.desc || "",
-    notes: payload.notes || "",
-    tags: Array.isArray(payload.tags) ? payload.tags : []
+    notes,
+    tags
   });
 }
 
@@ -241,6 +256,7 @@ export async function updateTransaction(id, payload){
   const category = payload.category
     ? await createCategory({ name: payload.category, type: payload.type || "expense" })
     : null;
+  const tags = Array.isArray(payload.tags) ? payload.tags : [];
   return updateItem("transactions", id, {
     type: payload.type,
     date: payload.date,
@@ -251,7 +267,7 @@ export async function updateTransaction(id, payload){
     pay: payload.pay || "",
     desc: payload.desc || "",
     notes: payload.notes || "",
-    tags: Array.isArray(payload.tags) ? payload.tags : []
+    tags
   });
 }
 
@@ -331,7 +347,8 @@ export async function importLocalDataToDirectus(onProgress){
   const catsExpense = cfg.expenseCategories || [];
   const catsIncome = cfg.incomeCategories || [];
   let done = 0;
-  const total = cfg.currencies.length + 1 + groups.length + catsExpense.length + catsIncome.length + tx.length;
+  const budgetsCount = Object.values(budgets).reduce((acc, m)=> acc + Object.keys(m || {}).length, 0);
+  const total = cfg.currencies.length + 1 + groups.length + catsExpense.length + catsIncome.length + budgetsCount + tx.length;
 
   for(const code of cfg.currencies){
     await upsertByUnique("currencies", "code", code, { code, symbol: code, decimals: 2, name: code });
@@ -360,12 +377,16 @@ export async function importLocalDataToDirectus(onProgress){
     for(const [category, amount] of Object.entries(data || {})){
       const targetCategory = category.startsWith(GROUP_PREFIX) ? `${PAYLOAD_GROUP_PREFIX}${category.replace(GROUP_PREFIX, "")}` : category;
       await upsertBudget({ month, category: targetCategory, amount, currency: cfg.baseCurrency });
+      onProgress?.(++done, total, `Presupuesto ${month}`);
     }
   }
 
   for(const row of tx){
     const importId = `local-${row.id}`;
-    await createTransaction({ ...row, tags: { import_id: importId } });
+    const notes = String(row.notes || "").includes(`import_id:${importId}`)
+      ? (row.notes || "")
+      : `${String(row.notes || "").trim()}${row.notes ? "\n" : ""}import_id:${importId}`.trim();
+    await createTransaction({ ...row, notes });
     onProgress?.(++done, total, `Movimiento ${row.id}`);
   }
 
