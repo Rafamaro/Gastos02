@@ -99,3 +99,20 @@ export async function upsertByUnique(collection, uniqueField, value, payload){
   if(found) return updateItem(collection, found.id || found[uniqueField], payload);
   return createItem(collection, { ...payload, [uniqueField]: value });
 }
+
+const directusClient = {
+  setDirectusConfig,
+  ping,
+  getItems,
+  createItem,
+  updateItem,
+  deleteItem,
+  findOneByFilter,
+  upsertByUnique
+};
+
+if(typeof window !== "undefined"){
+  window.directusClient = directusClient;
+}
+
+export default directusClient;
