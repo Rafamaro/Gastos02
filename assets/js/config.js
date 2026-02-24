@@ -39,7 +39,11 @@ export function initConfig(state){
     try{
       const email = readInputValue("directusAccountEmail").trim();
       const password = readInputValue("directusAccountPassword");
-      setDirectusSettings({ serviceEmail: email, servicePassword: password });
+      setDirectusSettings({
+        baseUrl: readInputValue("directusUrl").trim(),
+        serviceEmail: email,
+        servicePassword: password
+      });
       await loginDirectus(email, password);
       renderDirectusSession();
       toast(`Conectado como ${email} ✅`);
@@ -92,7 +96,7 @@ function renderDirectusSettings(){
 }
 
 function renderDirectusSession(){
-  const node = el("directusSessionState");
+  const node = el("directus-session-state") || el("directusSessionState");
   if(!node) return;
   const session = getDirectusSession();
   node.textContent = session.connected && session.email
