@@ -5,7 +5,6 @@ import { setDirectusConfig, ping, getItems, createItem, updateItem, deleteItem, 
 
 const BACKEND_KEY = "gastos02_backend";
 const DIRECTUS_URL_KEY = "gastos02_directus_url";
-const DIRECTUS_SERVICE_EMAIL_KEY = "gastos02_directus_service_email";
 const GROUP_PREFIX = "__group__::";
 const PAYLOAD_GROUP_PREFIX = "[GRUPO] ";
 
@@ -20,9 +19,7 @@ export function setBackendMode(mode){
 
 export function getDirectusConfig(){
   return {
-    baseUrl: localStorage.getItem(DIRECTUS_URL_KEY) || "https://directus.drperez86.com",
-    serviceEmail: localStorage.getItem(DIRECTUS_SERVICE_EMAIL_KEY) || "",
-    servicePassword: ""
+    baseUrl: localStorage.getItem(DIRECTUS_URL_KEY) || "https://directus.drperez86.com"
   };
 }
 

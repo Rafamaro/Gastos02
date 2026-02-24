@@ -4,7 +4,7 @@ const DIRECTUS_SERVICE_EMAIL_KEY = "gastos02_directus_service_email";
 
 const cfg = {
   baseUrl: localStorage.getItem("gastos02_directus_url") || DEFAULT_BASE_URL,
-  serviceEmail: window.__GASTOS02_DIRECTUS_SERVICE_EMAIL || localStorage.getItem(DIRECTUS_SERVICE_EMAIL_KEY) || "",
+  serviceEmail: window.__GASTOS02_DIRECTUS_SERVICE_EMAIL || "",
   servicePassword: window.__GASTOS02_DIRECTUS_SERVICE_PASSWORD || "",
   accessToken: "",
   loginPromise: null
@@ -19,7 +19,6 @@ export function setDirectusConfig({ baseUrl, serviceEmail, servicePassword } = {
   if(typeof serviceEmail === "string"){
     cfg.serviceEmail = serviceEmail.trim();
     cfg.accessToken = "";
-    localStorage.setItem(DIRECTUS_SERVICE_EMAIL_KEY, cfg.serviceEmail);
   }
   if(typeof servicePassword === "string"){
     cfg.servicePassword = servicePassword;
@@ -79,7 +78,6 @@ async function ensureAuth(){
 
 export async function login(email, password, { force = false } = {}){
   if(!force && cfg.accessToken) return cfg.accessToken;
-  if(force) cfg.accessToken = "";
   if(cfg.loginPromise) return cfg.loginPromise;
 
   const safeEmail = typeof email === "string" ? email.trim() : "";
