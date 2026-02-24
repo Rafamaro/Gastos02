@@ -23,7 +23,7 @@ export function initConfig(state){
 
   el("btnDirectusTest").addEventListener("click", async ()=>{
     try{
-      setDirectusSettings({ baseUrl: el("directusUrl").value.trim(), token: el("directusToken").value.trim() });
+      setDirectusSettings({ baseUrl: el("directusUrl").value.trim() });
       await pingDirectus();
       toast("Conexión Directus OK ✅");
     }catch(err){ toast(err.message || "No se pudo conectar", "danger"); }
@@ -52,7 +52,6 @@ export function initConfig(state){
 function renderDirectusSettings(){
   const directus = getDirectusConfig();
   el("directusUrl").value = directus.baseUrl;
-  el("directusToken").value = directus.token;
   el("useDirectus").checked = getBackendMode() === "directus";
 }
 
