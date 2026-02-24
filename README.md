@@ -15,16 +15,17 @@ Aplicación web (SPA) para registrar movimientos de ingresos/gastos, evaluarlos 
 ## Integración con Directus
 
 1. Ir a **Config → Directus**.
-2. Cargar `Directus URL` (por defecto `https://directus.drperez86.com`) y token.
-3. Presionar **Probar conexión**.
-4. Activar **Usar Directus** para que Directus sea fuente de verdad.
-5. Opcional: usar **Importar a Directus** para subir datos locales actuales.
+2. Cargar `Directus URL` (por defecto `https://directus.drperez86.com`).
+3. Cargar credenciales del usuario de servicio (`Email usuario servicio` y `Password usuario servicio`) o inyectarlas vía `window.__GASTOS02_DIRECTUS_SERVICE_EMAIL` / `window.__GASTOS02_DIRECTUS_SERVICE_PASSWORD`.
+4. Presionar **Probar conexión**.
+5. Activar **Usar Directus** para que Directus sea fuente de verdad.
+6. Opcional: usar **Importar a Directus** para subir datos locales actuales.
 
 ### Feature flags / storage local
 
 - `gastos02_backend = "local" | "directus"`
 - `gastos02_directus_url`
-- `gastos02_directus_token`
+- `gastos02_directus_service_email`
 
 ### Colecciones utilizadas y mapeo
 
@@ -73,7 +74,7 @@ http://localhost:8080
 
 ## Validación manual sugerida
 
-1. Activar modo Directus con token válido.
+1. Activar modo Directus con credenciales de servicio válidas.
 2. Crear grupo/categoría/movimiento/presupuesto y verificar persistencia.
 3. Recargar página y confirmar lectura desde Directus.
-4. Desactivar Directus o dejar token vacío y confirmar fallback local sin crash.
+4. Desactivar Directus y confirmar fallback local sin crash.
