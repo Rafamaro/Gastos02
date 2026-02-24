@@ -6,7 +6,7 @@ import { initIngreso } from "./ingreso.js";
 import { initDashboard } from "./dashboard.js";
 import { initConfig } from "./config.js";
 import { initExport } from "./export.js";
-import { getSettings, listTransactions, listBudgets, syncBudgetMapFromRows } from "./dataStore.js";
+import { getSettings, listTransactions, listBudgets, syncBudgetMapFromRows, getBackendMode, listCurrencies, listGroups, listCategories } from "./dataStore.js";
 
 function makeBus(){
   return {
@@ -30,6 +30,19 @@ async function init(){
   setTheme(getTheme());
 
   state.config = await safelyLoad("configuración", () => getSettings(), structuredClone(defaults));
+  if(getBackendMode() === "directus"){
+    await safelyLoad("catálogos Directus", async ()=>{
+      const [currencies, groups, categories] = await Promise.all([
+        listCurrencies(),
+        listGroups(),
+        listCategories()
+      ]);
+      state.config.currencies = currencies.map(x => x.code);
+      state.config.expenseGroups = groups.map(x => x.name);
+      state.config.expenseCategories = categories.filter(x => x.type === "expense").map(x => x.name);
+      state.config.incomeCategories = categories.filter(x => x.type === "income").map(x => x.name);
+    }, null);
+  }
   state.tx = await safelyLoad("movimientos", () => listTransactions(), []);
   state.budgetRows = await safelyLoad("presupuestos", () => listBudgets(), []);
   state.budgets = syncBudgetMapFromRows(state.budgetRows);
@@ -70,7 +83,7 @@ async function safelyLoad(label, fn, fallback){
   try{ return await fn(); }
   catch(err){
     console.error(`Error al cargar ${label}`, err);
-    toast(`No se pudo cargar ${label}. Se usaron valores por defecto.`, "warn");
+    toast(err.userMessage || `No se pudo cargar ${label}. Se usaron valores por defecto.`, "warn");
     return fallback;
   }
 }

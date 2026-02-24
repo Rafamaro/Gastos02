@@ -362,19 +362,22 @@ Finanzas"></textarea>
               <input type="text" id="directusUrl" placeholder="https://directus.drperez86.com" />
             </div>
             <div>
-              <label>Email usuario servicio</label>
-              <input type="email" id="directusServiceEmail" placeholder="servicio@dominio.com" />
+              <label>Cuenta Directus · Email</label>
+              <input type="email" id="directusAccountEmail" placeholder="usuario@dominio.com" />
             </div>
             <div>
-              <label>Password usuario servicio</label>
-              <input type="password" id="directusServicePassword" placeholder="••••••••" />
+              <label>Cuenta Directus · Password</label>
+              <input type="password" id="directusAccountPassword" placeholder="••••••••" />
             </div>
           </div>
           <div style="display:flex; gap:10px; align-items:center; margin-top:10px; flex-wrap:wrap">
             <button class="btn" id="btnDirectusTest">Probar conexión</button>
+            <button class="btn" id="btnDirectusLogin">Iniciar sesión</button>
+            <button class="btn" id="btnDirectusLogout">Cerrar sesión</button>
             <label style="display:flex; gap:8px; align-items:center"><input type="checkbox" id="useDirectus" /> Usar Directus</label>
             <button class="btn" id="btnImportDirectus">Importar a Directus</button>
             <span class="hint" id="directusImportProgress"></span>
+            <span class="hint" id="directusSessionState">No conectado</span>
           </div>
         </div>
       </div>

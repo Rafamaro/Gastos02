@@ -1,7 +1,19 @@
 import { defaults } from "./constants.js";
 import { mergeConfig, loadConfig, saveConfig, loadTransactions, saveTransactions, loadBudgets, saveBudgets } from "./storage.js";
 import { normalizeTx } from "./utils.js";
-import { setDirectusConfig, ping, getItems, createItem, updateItem, deleteItem, findOneByFilter, upsertByUnique } from "./directusClient.js";
+import {
+  setDirectusConfig,
+  ping,
+  getItems,
+  createItem,
+  updateItem,
+  deleteItem,
+  findOneByFilter,
+  upsertByUnique,
+  login as directusLogin,
+  clearSession,
+  getSessionStatus
+} from "./directusClient.js";
 
 const BACKEND_KEY = "gastos02_backend";
 const DIRECTUS_URL_KEY = "gastos02_directus_url";
@@ -60,13 +72,17 @@ export async function getSettings(){
   if(!isDirectus()) return loadConfig();
 
   const [settings] = await getItems("settings", { limit: 1, fields: ["id", "locale", "base_currency.code"] });
+  if(!settings){
+    await createItem("settings", { base_currency: defaults.baseCurrency, locale: defaults.locale });
+  }
+  const settingRow = settings || (await getItems("settings", { limit: 1, fields: ["id", "locale", "base_currency.code"] }))[0];
   const currencies = await listCurrencies();
   const cats = await getItems("categories", { fields: ["id","name","type","group.id","group.name"] });
   const groups = await getItems("expense_groups", { fields: ["id","name","description"] });
 
   return mergeConfig({
-    baseCurrency: settings?.base_currency?.code || defaults.baseCurrency,
-    locale: settings?.locale || defaults.locale,
+    baseCurrency: settingRow?.base_currency?.code || defaults.baseCurrency,
+    locale: settingRow?.locale || defaults.locale,
     currencies: currencies.map(x=>x.code),
     expenseCategories: cats.filter(x=>x.type==="expense").map(x=>x.name),
     incomeCategories: cats.filter(x=>x.type==="income").map(x=>x.name),
@@ -198,7 +214,9 @@ export async function createTransaction(payload){
     if(existing) return existing;
   }
 
-  const category = payload.category ? await findOneByFilter("categories", { name: { _eq: payload.category } }) : null;
+  const category = payload.category
+    ? await createCategory({ name: payload.category, type: payload.type || "expense" })
+    : null;
   return createItem("transactions", {
     type: payload.type,
     date: payload.date,
@@ -215,7 +233,9 @@ export async function createTransaction(payload){
 
 export async function updateTransaction(id, payload){
   if(!isDirectus()) return { id, ...payload };
-  const category = payload.category ? await findOneByFilter("categories", { name: { _eq: payload.category } }) : null;
+  const category = payload.category
+    ? await createCategory({ name: payload.category, type: payload.type || "expense" })
+    : null;
   return updateItem("transactions", id, {
     type: payload.type,
     date: payload.date,
@@ -278,6 +298,18 @@ export async function deleteBudget(id){
 
 export async function pingDirectus(){
   return ping();
+}
+
+export async function loginDirectus(email, password){
+  return directusLogin(email, password, { force: true });
+}
+
+export function logoutDirectus(){
+  clearSession();
+}
+
+export function getDirectusSession(){
+  return getSessionStatus();
 }
 
 export async function importLocalDataToDirectus(onProgress){
