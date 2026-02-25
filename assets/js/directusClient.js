@@ -400,7 +400,10 @@ export async function ping(){
 
 export async function getItems(collection, params = {}){
   const out = await request(`/items/${collection}${toQuery(params)}`, { method: "GET" });
-  return out?.data || [];
+  if(Array.isArray(out?.data)) return out.data;
+  if(out?.data && typeof out.data === "object") return [out.data];
+  if(Array.isArray(out)) return out;
+  return [];
 }
 
 export async function createItem(collection, payload){
