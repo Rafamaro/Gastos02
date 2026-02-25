@@ -111,11 +111,17 @@ export async function saveSettings(payload){
 
   const current = await getSettings();
   const merged = mergeConfig({ ...current, ...payload });
-  const existingRows = await getItems("settings", { limit: 1 });
-  const existing = firstRow(existingRows);
   const body = { base_currency: merged.baseCurrency, locale: merged.locale };
-  if(existing?.id) await updateItem("settings", existing.id, body);
-  else await createItem("settings", body);
+
+  try{
+    const existingRows = await getItems("settings", { limit: 1 });
+    const existing = firstRow(existingRows);
+    if(existing?.id) await updateItem("settings", existing.id, body);
+    else await createItem("settings", body);
+  }catch(err){
+    // Si Directus no tiene la colección/endpoint settings, no bloqueamos el flujo
+    console.warn("No se pudo guardar settings en Directus", err);
+  }
 
   return merged;
 }
