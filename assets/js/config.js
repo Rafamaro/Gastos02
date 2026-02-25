@@ -1,16 +1,5 @@
 import { el, fillSelect, monthISO, escapeHTML, toast } from "./utils.js";
-import * as dataStore from "./dataStore.js";
-
-const {
-  saveSettings, createGroup, createCategory, listBudgets, upsertBudget,
-  getBackendMode, setBackendMode, getDirectusConfig, setDirectusSettings,
-  pingDirectus, importLocalDataToDirectus, syncBudgetMapFromRows,
-  loginDirectus, logoutDirectus, getDirectusSession
-} = dataStore;
-
-const getDirectusSettingsCollectionInfo = typeof dataStore.getDirectusSettingsCollectionInfo === "function"
-  ? dataStore.getDirectusSettingsCollectionInfo
-  : async () => ({ key: null, message: "", error: "" });
+import { saveSettings, createGroup, createCategory, listBudgets, upsertBudget, syncBudgetMapFromRows } from "./dataStore.js";
 
 const GROUP_BUDGET_PREFIX = "__group__::";
 const PAYLOAD_GROUP_PREFIX = "[GRUPO] ";
@@ -18,7 +7,7 @@ const PAYLOAD_GROUP_PREFIX = "[GRUPO] ";
 function groupBudgetKey(group){ return `${GROUP_BUDGET_PREFIX}${group}`; }
 
 export function initConfig(state){
-  state.bus.on("config:refresh", ()=>{ renderRates(state); renderCategoryGrouping(state); renderBudgetTable(state); renderDirectusSettings(); });
+  state.bus.on("config:refresh", ()=>{ renderRates(state); renderCategoryGrouping(state); renderBudgetTable(state); });
 
   el("btnSaveConfig")?.addEventListener("click", ()=> saveConfigFromUI(state));
   el("btnResetConfig")?.addEventListener("click", ()=> location.reload());
@@ -27,108 +16,6 @@ export function initConfig(state){
   el("btnSaveBudgets")?.addEventListener("click", ()=> saveBudgetsFromUI(state));
   el("budgetMonth")?.addEventListener("change", ()=> renderBudgetTable(state));
   el("budgetMode")?.addEventListener("change", ()=> renderBudgetTable(state));
-
-  el("btnDirectusTest")?.addEventListener("click", async ()=>{
-    try{
-      const directusUrl = readInputValue("directusUrl").trim();
-      setDirectusSettings({
-        baseUrl: directusUrl,
-        serviceEmail: readInputValue("directusAccountEmail").trim(),
-        servicePassword: readInputValue("directusAccountPassword")
-      });
-      await pingDirectus();
-      toast("Conexión Directus OK ✅");
-    }catch(err){ toast(err.userMessage || err.message || "No se pudo conectar", "danger"); }
-  });
-
-  el("btnDirectusLogin")?.addEventListener("click", async ()=>{
-    try{
-      const email = readInputValue("directusAccountEmail").trim();
-      const password = readInputValue("directusAccountPassword");
-      setDirectusSettings({
-        baseUrl: readInputValue("directusUrl").trim(),
-        serviceEmail: email,
-        servicePassword: password
-      });
-      await loginDirectus(email, password);
-      setBackendMode("directus");
-      renderDirectusSession();
-      state.bus.emit("directus:reload_remote");
-      toast("Conectado ✅", "ok");
-    }catch(err){ toast(err.userMessage || err.message || "No se pudo iniciar sesión", "danger"); }
-  });
-
-  el("btnDirectusLogout")?.addEventListener("click", ()=>{
-    logoutDirectus();
-    renderDirectusSession();
-    toast("Sesión cerrada.", "warn");
-  });
-
-  el("useDirectus")?.addEventListener("change", ()=>{
-    setBackendMode(el("useDirectus").checked ? "directus" : "local");
-    toast("Backend actualizado. Recargando…", "warn");
-    setTimeout(()=> location.reload(), 400);
-  });
-
-  el("btnImportDirectus")?.addEventListener("click", async ()=>{
-    const progress = el("directusImportProgress");
-    if(progress) progress.textContent = "Importando…";
-    try{
-      await importLocalDataToDirectus((done, total, label)=>{ if(progress) progress.textContent = `${done}/${total} · ${label}`; });
-      if(progress) progress.textContent = "Importación finalizada ✅";
-      toast("Importado a Directus ✅");
-    }catch(err){
-      if(progress) progress.textContent = "Importación fallida";
-      toast(err.message || "Error de importación", "danger");
-    }
-  });
-}
-
-function readInputValue(id){
-  const node = el(id);
-  if(!node || !("value" in node)) return "";
-  return String(node.value || "");
-}
-
-function renderDirectusSettings(){
-  const directus = getDirectusConfig();
-  const urlInput = el("directusUrl");
-  const emailInput = el("directusAccountEmail");
-  const passwordInput = el("directusAccountPassword");
-  const useDirectus = el("useDirectus");
-  if(!urlInput && !emailInput && !passwordInput && !useDirectus) return;
-  if(urlInput) urlInput.value = directus.baseUrl;
-  if(emailInput) emailInput.value = directus.serviceEmail || "";
-  if(passwordInput) passwordInput.value = directus.servicePassword || "";
-  if(useDirectus) useDirectus.checked = getBackendMode() === "directus";
-  renderDirectusSession();
-}
-
-function renderDirectusSession(){
-  const node = el("directus-session-state") || el("directusSessionState");
-  const settingsNode = el("directus-settings-collection-state");
-  if(!node && !settingsNode) return;
-  const session = getDirectusSession();
-  if(node){
-    node.textContent = session.connected && session.email
-      ? `Directus: Conectado como ${session.email}`
-      : "Directus: No conectado";
-  }
-
-  if(settingsNode) settingsNode.textContent = "Colección settings detectada: —";
-  if(!session.connected) return;
-
-  getDirectusSettingsCollectionInfo()
-    .then(info => {
-      if(!settingsNode) return;
-      settingsNode.textContent = info?.key
-        ? `Colección settings detectada: ${info.key}`
-        : "No existe colección settings en Directus. Revisá el key real en Settings → Data Model.";
-    })
-    .catch(() => {
-      if(!settingsNode) return;
-      settingsNode.textContent = "No existe colección settings en Directus. Revisá el key real en Settings → Data Model.";
-    });
 }
 
 export function renderRates(state){
@@ -178,11 +65,9 @@ export async function saveConfigFromUI(state){
   });
 
   await saveSettings(config);
-  if(getBackendMode() === "directus"){
-    for(const g of groups) await createGroup({ name: g, description: "" });
-    for(const c of expCats) await createCategory({ name: c, type: "expense", group: categoryGroups[c] });
-    for(const c of incCats) await createCategory({ name: c, type: "income" });
-  }
+  for(const g of groups) await createGroup({ name: g, description: "" });
+  for(const c of expCats) await createCategory({ name: c, type: "expense", group: categoryGroups[c] });
+  for(const c of incCats) await createCategory({ name: c, type: "income" });
 
   fillSelect(el("fCurrency"), config.currencies);
   fillSelect(el("eCurrency"), config.currencies);

@@ -2,7 +2,7 @@ const BUILD_TIMESTAMP = String(window.__BUILD_TIMESTAMP__ || Date.now());
 const withBuild = (path) => `${path}?v=${encodeURIComponent(BUILD_TIMESTAMP)}`;
 
 const { el, monthISO, todayISO, fillSelect, toast } = await import(withBuild("./utils.js"));
-const { getTheme, setTheme, loadConfig, loadTransactions, loadBudgets } = await import(withBuild("./storage.js"));
+const { getTheme, setTheme } = await import(withBuild("./storage.js"));
 const { APP_VERSION, defaults } = await import(withBuild("./constants.js"));
 const { initTabs } = await import(withBuild("./router.js"));
 const { initIngreso } = await import(withBuild("./ingreso.js"));
@@ -13,12 +13,7 @@ const {
   getSettings,
   listTransactions,
   listBudgets,
-  syncBudgetMapFromRows,
-  getBackendMode,
-  listCurrencies,
-  listGroups,
-  listCategories,
-  ensureDirectusSession
+  syncBudgetMapFromRows
 } = await import(withBuild("./dataStore.js"));
 
 function makeBus(){
@@ -36,25 +31,11 @@ const state = {
   budgets: {},
   page: 1,
   PAGE_SIZE: 12,
-  charts: { daily:null, monthly:null, cats:null, monthlyBreakdown:null, pay:null },
-  directus: { available: true }
+  charts: { daily:null, monthly:null, cats:null, monthlyBreakdown:null, pay:null }
 };
 
 async function init(){
   setTheme(getTheme());
-
-  if(getBackendMode() === "directus"){
-    const session = await ensureDirectusSession();
-    state.directus = {
-      available: Boolean(session?.ok),
-      reason: session?.reason || ""
-    };
-    if(!state.directus.available){
-      renderLoginUI();
-      state.bus.emit("directus:auth_required");
-    }
-  }
-
   await safelyLoadData();
 
   el("fDate").value = todayISO();
@@ -91,72 +72,23 @@ async function init(){
   initConfig(state);
   initExport(state);
 
-  state.bus.on("directus:reload_remote", async ()=>{
-    try{
-      const session = await ensureDirectusSession();
-      if(!session?.ok){
-        renderLoginUI();
-        state.bus.emit("directus:auth_required");
-        return;
-      }
-      state.directus = { available: true, reason: "" };
-      await safelyLoadData();
-      state.bus.emit("dashboard:refresh");
-      state.bus.emit("ingreso:refresh");
-      state.bus.emit("config:refresh");
-    }catch(err){
-      toast(err.userMessage || err.message || "No se pudieron recargar datos remotos", "warn");
-    }
-  });
-
   state.bus.emit("dashboard:refresh");
   state.bus.emit("ingreso:refresh");
   state.bus.emit("config:refresh");
 }
 
 async function safelyLoadData(){
-  const directusBlocked = getBackendMode() === "directus" && !state.directus.available;
-
-  if(directusBlocked){
-    state.config = loadConfig() || structuredClone(defaults);
-    state.tx = loadTransactions(state.config);
-    state.budgetRows = [];
-    state.budgets = loadBudgets();
-    return;
-  }
-
   const loadedSettings = await safelyLoad("configuración", () => getSettings(), null);
   state.config = loadedSettings || structuredClone(defaults);
-
-  if(getBackendMode() === "directus"){
-    await safelyLoad("catálogos Directus", async ()=>{
-      const [currencies, groups, categories] = await Promise.all([
-        listCurrencies(),
-        listGroups(),
-        listCategories()
-      ]);
-      state.config.currencies = currencies.map(x => x.code);
-      state.config.expenseGroups = groups.map(x => x.name);
-      state.config.expenseCategories = categories.filter(x => x.type === "expense").map(x => x.name);
-      state.config.incomeCategories = categories.filter(x => x.type === "income").map(x => x.name);
-    }, null);
-  }
   state.tx = await safelyLoad("movimientos", () => listTransactions(), []);
   state.budgetRows = await safelyLoad("presupuestos", () => listBudgets(), []);
   state.budgets = syncBudgetMapFromRows(state.budgetRows);
 }
 
-function renderLoginUI(){
-  toast("Directus: no conectado. Se cargaron datos locales.", "warn");
-  const statusNode = el("directus-session-state") || el("directusSessionState");
-  if(statusNode) statusNode.textContent = "Directus: no conectado";
-}
-
 async function safelyLoad(label, fn, fallback){
   try{ return await fn(); }
   catch(err){
-    const authError = err?.code === "AUTH_REQUIRED" || err?.code === "DIRECTUS_AUTH_REQUIRED" || err?.status === 401;
-    if(!authError) console.error(`Error al cargar ${label}`, err);
+    console.error(`Error al cargar ${label}`, err);
     toast(err.userMessage || `No se pudo cargar ${label}. Se usaron valores por defecto.`, "warn");
     return fallback;
   }
