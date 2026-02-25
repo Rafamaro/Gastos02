@@ -1,6 +1,7 @@
 import { defaults } from "./constants.js";
 import { mergeConfig, loadConfig, saveConfig, loadTransactions, saveTransactions, loadBudgets, saveBudgets } from "./storage.js";
 import { normalizeTx } from "./utils.js";
+import { ensureSession as ensureDirectusClientSession } from "./directusClient.js";
 
 const GROUP_PREFIX = "__group__::";
 const PAYLOAD_GROUP_PREFIX = "[GRUPO] ";
@@ -274,5 +275,30 @@ export function syncBudgetMapFromRows(rows){
 }
 
 export async function ensureDirectusSession(){
-  return { ok: true, connected: true, source: "local" };
+  try{
+    const session = await ensureDirectusClientSession();
+    return {
+      ok: true,
+      connected: Boolean(session?.connected),
+      baseUrl: session?.baseUrl || "",
+      user: session?.user || null,
+      role: session?.role || null,
+      permissions: session?.permissions || [],
+      abilities: session?.abilities || {},
+      access_token: session?.access_token || "",
+      refresh_token: session?.refresh_token || "",
+      expires: Number(session?.expires || 0)
+    };
+  }catch(err){
+    return {
+      ok: false,
+      connected: false,
+      baseUrl: "",
+      user: null,
+      role: null,
+      permissions: [],
+      abilities: {},
+      error: err
+    };
+  }
 }

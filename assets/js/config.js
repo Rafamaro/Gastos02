@@ -1,13 +1,72 @@
 import { el, fillSelect, monthISO, escapeHTML, toast } from "./utils.js";
 import { saveSettings, createGroup, createCategory, listBudgets, upsertBudget, syncBudgetMapFromRows } from "./dataStore.js";
+import {
+  ping,
+  login,
+  logout,
+  getMe,
+  getMyPermissions,
+  loadSession,
+  saveSession,
+  clearSession,
+  buildAbilities
+} from "./directusClient.js";
 
 const GROUP_BUDGET_PREFIX = "__group__::";
 const PAYLOAD_GROUP_PREFIX = "[GRUPO] ";
+const DEFAULT_DX_URL = "https://directus.drperez86.com";
 
 function groupBudgetKey(group){ return `${GROUP_BUDGET_PREFIX}${group}`; }
 
+function summarizePermissions(permissions = []){
+  if(!permissions.length) return "Sin permisos cargados.";
+  return permissions
+    .slice(0, 20)
+    .map(p => `• ${p.collection || "*"} → ${p.action}`)
+    .join("\n");
+}
+
+function syncDirectusState(state, partial = {}){
+  state.directus = {
+    connected: Boolean(partial.connected),
+    baseUrl: partial.baseUrl || state.directus?.baseUrl || DEFAULT_DX_URL,
+    user: partial.user || null,
+    role: partial.role || null,
+    permissions: partial.permissions || [],
+    abilities: partial.abilities || {},
+    access_token: partial.access_token || "",
+    refresh_token: partial.refresh_token || "",
+    expires: Number(partial.expires || 0),
+    lastError: partial.lastError || null
+  };
+  state.bus.emit("directus:changed", state.directus);
+}
+
+function currentDirectusCredentials(){
+  return {
+    baseUrl: (el("dxUrl")?.value || "").trim() || DEFAULT_DX_URL,
+    email: (el("dxEmail")?.value || "").trim(),
+    password: el("dxPass")?.value || "",
+    otp: (el("dxOtp")?.value || "").trim()
+  };
+}
+
+async function fetchDirectusProfile(baseUrl, access_token){
+  const [user, permissions] = await Promise.all([
+    getMe({ baseUrl, access_token }),
+    getMyPermissions({ baseUrl, access_token })
+  ]);
+  return {
+    user,
+    role: user?.role ? { id: user.role.id || null, name: user.role.name || "Sin rol" } : null,
+    permissions,
+    abilities: buildAbilities(permissions)
+  };
+}
+
 export function initConfig(state){
-  state.bus.on("config:refresh", ()=>{ renderRates(state); renderCategoryGrouping(state); renderBudgetTable(state); });
+  state.bus.on("config:refresh", ()=>{ renderRates(state); renderCategoryGrouping(state); renderBudgetTable(state); renderDirectusCard(state); });
+  state.bus.on("directus:changed", ()=> renderDirectusCard(state));
 
   el("btnSaveConfig")?.addEventListener("click", ()=> saveConfigFromUI(state));
   el("btnResetConfig")?.addEventListener("click", ()=> location.reload());
@@ -16,6 +75,100 @@ export function initConfig(state){
   el("btnSaveBudgets")?.addEventListener("click", ()=> saveBudgetsFromUI(state));
   el("budgetMonth")?.addEventListener("change", ()=> renderBudgetTable(state));
   el("budgetMode")?.addEventListener("change", ()=> renderBudgetTable(state));
+
+  el("btnDxPing")?.addEventListener("click", async ()=>{
+    const { baseUrl } = currentDirectusCredentials();
+    try{
+      await ping(baseUrl);
+      toast("Ping Directus OK ✅");
+      el("dxStatus").textContent = `Conexión API OK (${baseUrl})`;
+    }catch(err){
+      toast(err.userMessage || "Ping Directus falló", "danger");
+      el("dxStatus").textContent = "ERROR de conexión";
+    }
+  });
+
+  el("btnDxLogin")?.addEventListener("click", async ()=>{
+    const { baseUrl, email, password, otp } = currentDirectusCredentials();
+    try{
+      const session = await login({ baseUrl, email, password, otp });
+      const profile = await fetchDirectusProfile(session.baseUrl, session.access_token);
+      const fullSession = { ...session, ...profile, connected: true };
+      saveSession(fullSession);
+      syncDirectusState(state, fullSession);
+      toast("Conectado a Directus ✅");
+    }catch(err){
+      clearSession();
+      syncDirectusState(state, { connected: false, baseUrl, lastError: err });
+      toast(err.userMessage || "No se pudo conectar a Directus", "danger");
+    }
+  });
+
+  el("btnDxLogout")?.addEventListener("click", async ()=>{
+    const stored = loadSession();
+    const baseUrl = (el("dxUrl")?.value || stored?.baseUrl || state.directus?.baseUrl || DEFAULT_DX_URL).trim();
+    try{
+      if(stored?.refresh_token){
+        await logout({ baseUrl, refresh_token: stored.refresh_token });
+      }
+    }catch(err){
+      toast(err.userMessage || "No se pudo cerrar sesión en Directus", "warn");
+    }finally{
+      clearSession();
+      syncDirectusState(state, { connected: false, baseUrl });
+      toast("Sesión de Directus cerrada");
+    }
+  });
+
+  el("btnDxReloadPerms")?.addEventListener("click", async ()=>{
+    const stored = loadSession();
+    const token = stored?.access_token || state.directus?.access_token;
+    const baseUrl = stored?.baseUrl || state.directus?.baseUrl || DEFAULT_DX_URL;
+    if(!token){
+      toast("No hay sesión activa para recargar permisos", "warn");
+      return;
+    }
+
+    try{
+      const profile = await fetchDirectusProfile(baseUrl, token);
+      const merged = {
+        ...state.directus,
+        ...stored,
+        baseUrl,
+        access_token: token,
+        ...profile,
+        connected: true
+      };
+      saveSession(merged);
+      syncDirectusState(state, merged);
+      toast("Permisos recargados ✅");
+    }catch(err){
+      clearSession();
+      syncDirectusState(state, { connected: false, baseUrl, lastError: err });
+      toast(err.userMessage || "No se pudieron recargar permisos", "danger");
+    }
+  });
+}
+
+export function renderDirectusCard(state){
+  const dx = state.directus || { connected: false, permissions: [] };
+  if(el("dxUrl") && !el("dxUrl").value) el("dxUrl").value = dx.baseUrl || DEFAULT_DX_URL;
+  if(el("dxEmail") && dx.user?.email) el("dxEmail").value = dx.user.email;
+
+  el("dxStatus").textContent = dx.connected
+    ? `Conectado como ${dx.user?.email || "(sin email)"}`
+    : "Desconectado";
+  el("dxRole").textContent = dx.role?.name ? `Rol: ${dx.role.name}` : "Rol: -";
+
+  const collections = Object.keys(dx.abilities || {});
+  const summary = collections.length
+    ? collections.map(name => {
+      const ab = dx.abilities[name] || {};
+      return `${name}: R${ab.read ? "✅" : "❌"} C${ab.create ? "✅" : "❌"} U${ab.update ? "✅" : "❌"} D${ab.delete ? "✅" : "❌"}`;
+    }).join("\n")
+    : summarizePermissions(dx.permissions || []);
+
+  el("dxPermsSummary").textContent = summary;
 }
 
 export function renderRates(state){
