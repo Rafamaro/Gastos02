@@ -6,8 +6,32 @@ const LS_ACCESS = "gastos02_directus_access_token";
 const LS_REFRESH = "gastos02_directus_refresh_token";
 const DIRECTUS_USER_EMAIL_KEY = "gastos02_directus_user_email";
 
+function normalizeDirectusBaseUrl(input){
+  const raw = typeof input === "string" ? input.trim() : "";
+  if(!raw) return DEFAULT_BASE_URL;
+
+  const withScheme = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+
+  try{
+    const parsed = new URL(withScheme);
+    const parts = parsed.pathname.split("/").filter(Boolean);
+
+    const cutBy = ["admin", "items", "auth", "server", "content"];
+    let cutAt = parts.length;
+    for(const marker of cutBy){
+      const idx = parts.indexOf(marker);
+      if(idx >= 0) cutAt = Math.min(cutAt, idx);
+    }
+
+    const basePath = `/${parts.slice(0, cutAt).join("/")}`.replace(/\/$/, "") || "";
+    return `${parsed.origin}${basePath}`;
+  }catch(_err){
+    return DEFAULT_BASE_URL;
+  }
+}
+
 const cfg = {
-  baseUrl: localStorage.getItem("gastos02_directus_url") || DEFAULT_BASE_URL,
+  baseUrl: normalizeDirectusBaseUrl(localStorage.getItem("gastos02_directus_url") || DEFAULT_BASE_URL),
   serviceEmail: window.__GASTOS02_DIRECTUS_SERVICE_EMAIL || localStorage.getItem(DIRECTUS_SERVICE_EMAIL_KEY) || "",
   servicePassword: window.__GASTOS02_DIRECTUS_SERVICE_PASSWORD || localStorage.getItem(DIRECTUS_SERVICE_PASSWORD_KEY) || "",
   accessToken: localStorage.getItem(LS_ACCESS) || "",
@@ -22,12 +46,13 @@ const TOKEN_KEYS = {
   email: DIRECTUS_USER_EMAIL_KEY
 };
 
+// Si había quedado guardada una URL de admin/content/items, normalizamos y persistimos.
+localStorage.setItem("gastos02_directus_url", cfg.baseUrl);
+
 export function setDirectusConfig({ baseUrl, serviceEmail, servicePassword } = {}){
   if(typeof baseUrl === "string" && baseUrl.trim()){
-    // Aceptar URLs sin esquema (ej: "directus.dominio.com")
-    const raw = baseUrl.trim();
-    const withScheme = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
-    const nextBaseUrl = withScheme.replace(/\/$/, "");
+    // Aceptar URLs del admin o endpoint y convertirlas al base URL del API
+    const nextBaseUrl = normalizeDirectusBaseUrl(baseUrl);
     if(nextBaseUrl !== cfg.baseUrl){
       cfg.baseUrl = nextBaseUrl;
       clearSession();
@@ -150,7 +175,8 @@ async function request(path, options = {}){
       const err = new Error("AUTH_REQUIRED");
       err.status = 401;
       err.code = "AUTH_REQUIRED";
-      err.userMessage = "No conectado a Directus. Iniciá sesión para continuar.";
+      err.reason = auth.reason || "auth_missing";
+      err.userMessage = auth.userMessage || "No conectado a Directus. Iniciá sesión para continuar.";
       throw err;
     }
   }
@@ -162,6 +188,23 @@ async function request(path, options = {}){
       ...options,
       headers: buildHeaders(options.headers)
     });
+
+    // Directus puede responder 204 en DELETE
+    if(res.status === 204) return { data: null };
+
+    const ctype = String(res.headers.get("content-type") || "").toLowerCase();
+    const isJson = ctype.includes("application/json");
+    if(!isJson){
+      // Típico de Cloudflare Access / redirect / reverse-proxy devolviendo HTML
+      const sample = await res.text().catch(()=> "");
+      const err = new Error(`Respuesta no JSON desde Directus (${path}). status=${res.status}`);
+      err.status = res.status;
+      err.code = "DIRECTUS_NON_JSON";
+      err.userMessage = "Directus respondió contenido no-JSON (probable Cloudflare Access, redirección o proxy). Revisá que la URL apunte al API de Directus y que no esté protegida por Access.";
+      err.debug = { url: res.url, contentType: ctype, sample: sample.slice(0, 180) };
+      throw err;
+    }
+
     const data = await res.json().catch(() => ({}));
     if(!res.ok){
       const msg = data?.errors?.[0]?.message || `${res.status} ${res.statusText}`;
@@ -172,6 +215,16 @@ async function request(path, options = {}){
         err.userMessage = "Sesión expirada. Iniciá sesión nuevamente.";
       }
       if(res.status === 403) err.userMessage = "Sin permisos en Directus (403). Revisá el rol del usuario.";
+      throw err;
+    }
+    // Si es /items/* y no vino {data: ...}, toleramos shape alternativo y delegamos normalización a getItems()
+    if(path.startsWith("/items/") && data?.data === undefined){
+      if(Array.isArray(data)) return data;
+      if(data && typeof data === "object") return data;
+      const err = new Error(`Respuesta inesperada desde Directus (${path}).`);
+      err.status = res.status;
+      err.code = "DIRECTUS_BAD_SHAPE";
+      err.userMessage = "Directus devolvió una respuesta inesperada. Si usás Access/proxy, puede estar alterando el response.";
       throw err;
     }
     return data;
@@ -227,6 +280,16 @@ async function ensureAuth(){
       await refresh();
       return { ok: true };
     }catch(_err){
+      if(hasServiceCreds()){
+        try{
+          await login(cfg.serviceEmail, cfg.servicePassword);
+          return { ok: true, source: "service_login_after_refresh_fail" };
+        }catch(__loginErr){
+          clearTokens();
+          return { ok: false, reason: "refresh_and_login_failed", userMessage: `Sesión inválida y falló el login automático. ${String(__loginErr?.message || "").slice(0,180)}` };
+        }
+      }
+
       clearTokens();
       return { ok: false, reason: "refresh_failed" };
     }
@@ -239,7 +302,7 @@ async function ensureAuth(){
       return { ok: true, source: "service_login" };
     }catch(_err){
       clearTokens();
-      return { ok: false, reason: "login_failed" };
+      return { ok: false, reason: "login_failed", userMessage: `No se pudo iniciar sesión en Directus con el usuario configurado. ${String(_err?.message || "").slice(0,180)}` };
     }
   }
 
@@ -263,6 +326,13 @@ export async function login(email, password){
     body: JSON.stringify({ email: safeEmail, password: safePassword })
   })
     .then(async res => {
+      const ctype = String(res.headers.get("content-type") || "").toLowerCase();
+      const isJson = ctype.includes("application/json");
+      if(!isJson){
+        const sample = await res.text().catch(()=> "");
+        throw new Error(`Auth/login no devolvió JSON (status=${res.status}). Posible Cloudflare Access / proxy. Sample: ${sample.slice(0, 120)}`);
+      }
+
       const data = await res.json().catch(() => ({}));
       if(!res.ok){
         const msg = data?.errors?.[0]?.message || `${res.status} ${res.statusText}`;
@@ -292,6 +362,18 @@ export async function refresh(){
     body: JSON.stringify({ refresh_token: refreshToken })
   })
     .then(async res => {
+      const ctype = String(res.headers.get("content-type") || "").toLowerCase();
+      const isJson = ctype.includes("application/json");
+      if(!isJson){
+        const sample = await res.text().catch(()=> "");
+        clearTokens();
+        const err = new Error(`Auth/refresh no devolvió JSON (status=${res.status}). Posible Cloudflare Access / proxy.`);
+        err.status = res.status;
+        err.userMessage = "No se pudo refrescar la sesión: Directus devolvió contenido no-JSON (posible Access/proxy).";
+        err.debug = { url: res.url, contentType: ctype, sample: sample.slice(0, 180) };
+        throw err;
+      }
+
       const data = await res.json().catch(() => ({}));
       if(!res.ok){
         clearTokens();
@@ -345,7 +427,10 @@ export async function ping(){
 
 export async function getItems(collection, params = {}){
   const out = await request(`/items/${collection}${toQuery(params)}`, { method: "GET" });
-  return out?.data || [];
+  if(Array.isArray(out?.data)) return out.data;
+  if(out?.data && typeof out.data === "object") return [out.data];
+  if(Array.isArray(out)) return out;
+  return [];
 }
 
 export async function createItem(collection, payload){
