@@ -6,6 +6,7 @@ import * as directusClientModule from "./directusClient.js";
 const {
   setDirectusConfig,
   ping,
+  listCollections,
   getItems,
   createItem,
   updateItem,
