@@ -192,8 +192,10 @@ async function request(path, options = {}){
       if(res.status === 403) err.userMessage = "Sin permisos en Directus (403). Revisá el rol del usuario.";
       throw err;
     }
-    // Si es /items/* y no vino {data: ...}, es sospechoso (proxy/Access suele romper el shape)
+    // Si es /items/* y no vino {data: ...}, toleramos shape alternativo y delegamos normalización a getItems()
     if(path.startsWith("/items/") && data?.data === undefined){
+      if(Array.isArray(data)) return data;
+      if(data && typeof data === "object") return data;
       const err = new Error(`Respuesta inesperada desde Directus (${path}).`);
       err.status = res.status;
       err.code = "DIRECTUS_BAD_SHAPE";
