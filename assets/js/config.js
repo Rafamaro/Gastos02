@@ -1,10 +1,16 @@
 import { el, fillSelect, monthISO, escapeHTML, toast } from "./utils.js";
-import {
+import * as dataStore from "./dataStore.js";
+
+const {
   saveSettings, createGroup, createCategory, listBudgets, upsertBudget,
   getBackendMode, setBackendMode, getDirectusConfig, setDirectusSettings,
   pingDirectus, importLocalDataToDirectus, syncBudgetMapFromRows,
   loginDirectus, logoutDirectus, getDirectusSession
-} from "./dataStore.js";
+} = dataStore;
+
+const getDirectusSettingsCollectionInfo = typeof dataStore.getDirectusSettingsCollectionInfo === "function"
+  ? dataStore.getDirectusSettingsCollectionInfo
+  : async () => ({ key: null, message: "", error: "" });
 
 const GROUP_BUDGET_PREFIX = "__group__::";
 const PAYLOAD_GROUP_PREFIX = "[GRUPO] ";
@@ -100,11 +106,29 @@ function renderDirectusSettings(){
 
 function renderDirectusSession(){
   const node = el("directus-session-state") || el("directusSessionState");
-  if(!node) return;
+  const settingsNode = el("directus-settings-collection-state");
+  if(!node && !settingsNode) return;
   const session = getDirectusSession();
-  node.textContent = session.connected && session.email
-    ? `Directus: Conectado como ${session.email}`
-    : "Directus: No conectado";
+  if(node){
+    node.textContent = session.connected && session.email
+      ? `Directus: Conectado como ${session.email}`
+      : "Directus: No conectado";
+  }
+
+  if(settingsNode) settingsNode.textContent = "Colección settings detectada: —";
+  if(!session.connected) return;
+
+  getDirectusSettingsCollectionInfo()
+    .then(info => {
+      if(!settingsNode) return;
+      settingsNode.textContent = info?.key
+        ? `Colección settings detectada: ${info.key}`
+        : "No existe colección settings en Directus. Revisá el key real en Settings → Data Model.";
+    })
+    .catch(() => {
+      if(!settingsNode) return;
+      settingsNode.textContent = "No existe colección settings en Directus. Revisá el key real en Settings → Data Model.";
+    });
 }
 
 export function renderRates(state){

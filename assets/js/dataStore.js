@@ -4,6 +4,7 @@ import { normalizeTx } from "./utils.js";
 import {
   setDirectusConfig,
   ping,
+  listCollections,
   getItems,
   createItem,
   updateItem,
@@ -20,6 +21,8 @@ const BACKEND_KEY = "gastos02_backend";
 const DIRECTUS_URL_KEY = "gastos02_directus_url";
 const DIRECTUS_SERVICE_EMAIL_KEY = "gastos02_directus_service_email";
 const DIRECTUS_SERVICE_PASSWORD_KEY = "gastos02_directus_service_password";
+const DIRECTUS_SETTINGS_COLLECTION_KEY = "directus_settings_collection_key";
+const DIRECTUS_SETTINGS_COLLECTION_ERROR_KEY = "directus_settings_collection_error";
 const GROUP_PREFIX = "__group__::";
 const PAYLOAD_GROUP_PREFIX = "[GRUPO] ";
 
@@ -69,14 +72,98 @@ function budgetRowsToLocal(rows){
   return out;
 }
 
+function firstRow(rows){
+  return Array.isArray(rows) ? (rows[0] || null) : null;
+}
+
+function settingsCollectionMessage(key){
+  return key
+    ? `Colección settings detectada: ${key}`
+    : "No existe colección settings en Directus. Revisá el key real en Settings → Data Model.";
+}
+
+function scoreSettingsCandidate(item){
+  const key = String(item?.collection || "").toLowerCase();
+  const note = String(item?.note || "").toLowerCase();
+  const icon = String(item?.icon || "").toLowerCase();
+  const hasSettings = key.includes("settings") || note.includes("settings") || icon.includes("settings");
+  if(!hasSettings) return -1;
+  let score = 1;
+  if(key === "settings") score += 100;
+  if(key.includes("settings")) score += 10;
+  if(note.includes("settings")) score += 3;
+  if(icon.includes("settings")) score += 2;
+  if(item?.singleton && key.includes("settings")) score += 20;
+  return score;
+}
+
+async function detectSettingsCollectionKey(){
+  const cached = String(localStorage.getItem(DIRECTUS_SETTINGS_COLLECTION_KEY) || "").trim();
+  if(cached) return cached;
+
+  const collectionsMap = await listCollections();
+  const rows = Object.values(collectionsMap || {});
+  if(collectionsMap?.settings){
+    localStorage.setItem(DIRECTUS_SETTINGS_COLLECTION_KEY, "settings");
+    localStorage.removeItem(DIRECTUS_SETTINGS_COLLECTION_ERROR_KEY);
+    return "settings";
+  }
+
+  let best = null;
+  let bestScore = -1;
+  for(const row of rows){
+    const score = scoreSettingsCandidate(row);
+    if(score > bestScore){
+      bestScore = score;
+      best = row;
+    }
+  }
+
+  const key = String(best?.collection || "").trim();
+  if(key){
+    localStorage.setItem(DIRECTUS_SETTINGS_COLLECTION_KEY, key);
+    localStorage.removeItem(DIRECTUS_SETTINGS_COLLECTION_ERROR_KEY);
+    return key;
+  }
+
+  const msg = settingsCollectionMessage("");
+  localStorage.removeItem(DIRECTUS_SETTINGS_COLLECTION_KEY);
+  localStorage.setItem(DIRECTUS_SETTINGS_COLLECTION_ERROR_KEY, msg);
+  return null;
+}
+
+export async function getDirectusSettingsCollectionInfo(){
+  if(!isDirectus()) return { key: "settings", message: "Modo local", error: "" };
+  try{
+    const key = await detectSettingsCollectionKey();
+    const message = settingsCollectionMessage(key);
+    if(key) localStorage.removeItem(DIRECTUS_SETTINGS_COLLECTION_ERROR_KEY);
+    return { key, message, error: key ? "" : message };
+  }catch(err){
+    const error = err?.userMessage || err?.message || settingsCollectionMessage("");
+    localStorage.setItem(DIRECTUS_SETTINGS_COLLECTION_ERROR_KEY, error);
+    const cached = String(localStorage.getItem(DIRECTUS_SETTINGS_COLLECTION_KEY) || "").trim();
+    return { key: cached || null, message: settingsCollectionMessage(cached), error };
+  }
+}
+
 export async function getSettings(){
   if(!isDirectus()) return loadConfig();
   try{
-    const [settings] = await getItems("settings", { limit: 1, fields: ["id", "locale", "base_currency.code"] });
-    if(!settings){
-      await createItem("settings", { base_currency: defaults.baseCurrency, locale: defaults.locale });
+    const settingsCollection = await detectSettingsCollectionKey();
+    if(!settingsCollection){
+      const err = new Error(settingsCollectionMessage(""));
+      err.userMessage = settingsCollectionMessage("");
+      throw err;
     }
-    const settingRow = settings || (await getItems("settings", { limit: 1, fields: ["id", "locale", "base_currency.code"] }))[0];
+
+    const settingsRows = await getItems(settingsCollection, { limit: 1, fields: ["id", "locale", "base_currency.code"] });
+    const settings = firstRow(settingsRows);
+    if(!settings){
+      await createItem(settingsCollection, { base_currency: defaults.baseCurrency, locale: defaults.locale });
+    }
+    const settingRows = settings ? [settings] : await getItems(settingsCollection, { limit: 1, fields: ["id", "locale", "base_currency.code"] });
+    const settingRow = firstRow(settingRows);
     const currencies = await listCurrencies();
     const cats = await getItems("categories", { fields: ["id","name","type","group.id","group.name"] });
     const groups = await getItems("expense_groups", { fields: ["id","name","description"] });
@@ -92,7 +179,7 @@ export async function getSettings(){
     });
   }catch(err){
     console.warn("No se pudieron cargar settings", err);
-    return null;
+    return mergeConfig(loadConfig());
   }
 }
 
@@ -105,10 +192,23 @@ export async function saveSettings(payload){
 
   const current = await getSettings();
   const merged = mergeConfig({ ...current, ...payload });
-  const [existing] = await getItems("settings", { limit: 1 });
   const body = { base_currency: merged.baseCurrency, locale: merged.locale };
-  if(existing?.id) await updateItem("settings", existing.id, body);
-  else await createItem("settings", body);
+
+  try{
+    const settingsCollection = await detectSettingsCollectionKey();
+    if(!settingsCollection){
+      console.warn(settingsCollectionMessage(""));
+      return merged;
+    }
+
+    const existingRows = await getItems(settingsCollection, { limit: 1 });
+    const existing = firstRow(existingRows);
+    if(existing?.id) await updateItem(settingsCollection, existing.id, body);
+    else await createItem(settingsCollection, body);
+  }catch(err){
+    // Si Directus no tiene la colección/endpoint settings, no bloqueamos el flujo
+    console.warn("No se pudo guardar settings en Directus", err);
+  }
 
   return merged;
 }
