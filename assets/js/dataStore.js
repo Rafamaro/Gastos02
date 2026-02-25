@@ -1,7 +1,9 @@
 import { defaults } from "./constants.js";
 import { mergeConfig, loadConfig, saveConfig, loadTransactions, saveTransactions, loadBudgets, saveBudgets } from "./storage.js";
 import { normalizeTx } from "./utils.js";
-import {
+import * as directusClientModule from "./directusClient.js";
+
+const {
   setDirectusConfig,
   ping,
   listCollections,
@@ -11,11 +13,15 @@ import {
   deleteItem,
   findOneByFilter,
   upsertByUnique,
-  login as directusLogin,
+  login: directusLogin,
   ensureAuth,
   clearSession,
   getSessionStatus
-} from "./directusClient.js";
+} = directusClientModule;
+
+const listCollections = typeof directusClientModule.listCollections === "function"
+  ? directusClientModule.listCollections
+  : async () => ({});
 
 const BACKEND_KEY = "gastos02_backend";
 const DIRECTUS_URL_KEY = "gastos02_directus_url";
