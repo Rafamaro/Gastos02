@@ -1,6 +1,5 @@
 import { el, fillSelect, fmtMoney, toBase, safeTags, normalizeTx, sortTx, todayISO, monthISO, toast, escapeHTML } from "./utils.js";
-import { createTransaction, updateTransaction, deleteTransaction } from "./dataStore.js";
-
+import { createTransaction, updateTransaction, deleteTransaction } from "./dataStore.js?v=1772015862292";
 export function initIngreso(state){
   // listeners de refresco externo
   state.bus.on("config:changed", ()=> {
