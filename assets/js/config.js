@@ -8,13 +8,23 @@ import {
   getMyPermissions,
   loadSession,
   saveSession,
-  clearSession,
-  buildAbilities
+  clearSession
 } from "./directusClient.js";
 
 const GROUP_BUDGET_PREFIX = "__group__::";
 const PAYLOAD_GROUP_PREFIX = "[GRUPO] ";
 const DEFAULT_DX_URL = "https://directus.drperez86.com";
+
+function buildAbilitiesFromPermissions(permissions = []){
+  const out = {};
+  for(const perm of permissions){
+    const collection = String(perm?.collection || "").trim() || "*";
+    const action = String(perm?.action || "").trim();
+    if(!out[collection]) out[collection] = { read: false, create: false, update: false, delete: false };
+    if(action === "read" || action === "create" || action === "update" || action === "delete") out[collection][action] = true;
+  }
+  return out;
+}
 
 function groupBudgetKey(group){ return `${GROUP_BUDGET_PREFIX}${group}`; }
 
@@ -60,7 +70,7 @@ async function fetchDirectusProfile(baseUrl, access_token){
     user,
     role: user?.role ? { id: user.role.id || null, name: user.role.name || "Sin rol" } : null,
     permissions,
-    abilities: buildAbilities(permissions)
+    abilities: buildAbilitiesFromPermissions(permissions)
   };
 }
 
