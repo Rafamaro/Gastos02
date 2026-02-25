@@ -1,10 +1,16 @@
 import { el, fillSelect, monthISO, escapeHTML, toast } from "./utils.js";
-import {
+import * as dataStore from "./dataStore.js";
+
+const {
   saveSettings, createGroup, createCategory, listBudgets, upsertBudget,
   getBackendMode, setBackendMode, getDirectusConfig, setDirectusSettings,
   pingDirectus, importLocalDataToDirectus, syncBudgetMapFromRows,
-  loginDirectus, logoutDirectus, getDirectusSession, getDirectusSettingsCollectionInfo
-} from "./dataStore.js";
+  loginDirectus, logoutDirectus, getDirectusSession
+} = dataStore;
+
+const getDirectusSettingsCollectionInfo = typeof dataStore.getDirectusSettingsCollectionInfo === "function"
+  ? dataStore.getDirectusSettingsCollectionInfo
+  : async () => ({ key: null, message: "", error: "" });
 
 const GROUP_BUDGET_PREFIX = "__group__::";
 const PAYLOAD_GROUP_PREFIX = "[GRUPO] ";
