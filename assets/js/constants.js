@@ -5,6 +5,8 @@ export const LS = {
   CFG: "mov_cfg_v2",
   BUD: "mov_bud_v2",
   THEME: "mov_theme_v2",
+  DX_AUTH: "dx_auth_v1",
+  DX_URL: "dx_url_v1",
   // compat old
   OLD_EXP: "gastos_expenses_v1",
   OLD_CFG: "gastos_config_v1",

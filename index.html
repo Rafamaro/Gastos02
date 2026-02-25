@@ -357,6 +357,47 @@ Finanzas"></textarea>
 
               </div>
 
+
+      <div class="card">
+        <h2>Directus</h2>
+        <div class="hint">Conectá con usuarios existentes en Directus usando la API raíz (sin <code>/admin</code>).</div>
+
+        <div class="row" style="margin-top:10px">
+          <div>
+            <label>Directus URL</label>
+            <input type="url" id="dxUrl" placeholder="https://directus.drperez86.com" value="https://directus.drperez86.com" />
+          </div>
+          <div>
+            <label>Email</label>
+            <input type="email" id="dxEmail" placeholder="usuario@dominio.com" />
+          </div>
+        </div>
+
+        <div class="row" style="margin-top:10px">
+          <div>
+            <label>Password</label>
+            <input type="password" id="dxPass" placeholder="••••••••" />
+          </div>
+          <div>
+            <label>OTP (opcional)</label>
+            <input type="text" id="dxOtp" placeholder="Código 2FA" />
+          </div>
+        </div>
+
+        <div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:12px">
+          <button class="btn" id="btnDxPing">Probar conexión</button>
+          <button class="btn primary" id="btnDxLogin">Conectar</button>
+          <button class="btn" id="btnDxLogout">Desconectar</button>
+          <button class="btn" id="btnDxReloadPerms">Recargar permisos</button>
+        </div>
+
+        <div style="margin-top:12px">
+          <div><strong>Status:</strong> <span id="dxStatus">Desconectado</span></div>
+          <div><strong>Rol:</strong> <span id="dxRole">-</span></div>
+          <label style="margin-top:8px">Permisos efectivos (resumen)</label>
+          <pre id="dxPermsSummary" style="margin:8px 0 0; max-height:220px; overflow:auto; padding:10px; border:1px solid var(--line); border-radius:12px; background:var(--bg-soft);">Sin permisos cargados.</pre>
+        </div>
+      </div>
       <div class="card">
         <h2>Presupuestos mensuales de gastos</h2>
         <div class="hint">Podés definir límites por categoría o por grupo. Si queda vacío, no se evalúa.</div>
