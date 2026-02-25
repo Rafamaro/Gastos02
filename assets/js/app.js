@@ -1,12 +1,15 @@
-import { el, monthISO, todayISO, fillSelect, toast } from "./utils.js";
-import { getTheme, setTheme, loadConfig, loadTransactions, loadBudgets } from "./storage.js";
-import { APP_VERSION, defaults } from "./constants.js";
-import { initTabs } from "./router.js";
-import { initIngreso } from "./ingreso.js";
-import { initDashboard } from "./dashboard.js";
-import { initConfig } from "./config.js";
-import { initExport } from "./export.js";
-import {
+const BUILD_TIMESTAMP = String(window.__BUILD_TIMESTAMP__ || Date.now());
+const withBuild = (path) => `${path}?v=${encodeURIComponent(BUILD_TIMESTAMP)}`;
+
+const { el, monthISO, todayISO, fillSelect, toast } = await import(withBuild("./utils.js"));
+const { getTheme, setTheme, loadConfig, loadTransactions, loadBudgets } = await import(withBuild("./storage.js"));
+const { APP_VERSION, defaults } = await import(withBuild("./constants.js"));
+const { initTabs } = await import(withBuild("./router.js"));
+const { initIngreso } = await import(withBuild("./ingreso.js"));
+const { initDashboard } = await import(withBuild("./dashboard.js"));
+const { initConfig } = await import(withBuild("./config.js"));
+const { initExport } = await import(withBuild("./export.js"));
+const {
   getSettings,
   listTransactions,
   listBudgets,
@@ -16,7 +19,7 @@ import {
   listGroups,
   listCategories,
   ensureDirectusSession
-} from "./dataStore.js";
+} = await import(withBuild("./dataStore.js"));
 
 function makeBus(){
   return {
