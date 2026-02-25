@@ -60,8 +60,15 @@ async function init(){
   el("budgetMode").value = "category";
   el("pillMonth").textContent = "Mes: " + monthISO();
 
+  const expectedVersion = String(window.__APP_VERSION__ || "").trim();
+  console.info(`[App] APP_VERSION=${APP_VERSION}`);
+
   const versionBadge = el("appVersionBadge");
   if(versionBadge) versionBadge.textContent = `Versión ${APP_VERSION}`;
+
+  if(expectedVersion && expectedVersion !== APP_VERSION){
+    toast("Estás viendo assets cacheados", "warn");
+  }
 
   fillSelect(el("fCurrency"), state.config.currencies);
   fillSelect(el("eCurrency"), state.config.currencies);
