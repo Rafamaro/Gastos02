@@ -13,7 +13,8 @@ const {
   getSettings,
   listTransactions,
   listBudgets,
-  syncBudgetMapFromRows
+  syncBudgetMapFromRows,
+  ensureDirectusSession
 } = await import(withBuild("./dataStore.js"));
 
 function makeBus(){
@@ -31,7 +32,8 @@ const state = {
   budgets: {},
   page: 1,
   PAGE_SIZE: 12,
-  charts: { daily:null, monthly:null, cats:null, monthlyBreakdown:null, pay:null }
+  charts: { daily:null, monthly:null, cats:null, monthlyBreakdown:null, pay:null },
+  directus: { connected:false, baseUrl:"https://directus.drperez86.com", user:null, role:null, permissions:[], abilities:{} }
 };
 
 async function init(){
@@ -75,6 +77,7 @@ async function init(){
   state.bus.emit("dashboard:refresh");
   state.bus.emit("ingreso:refresh");
   state.bus.emit("config:refresh");
+  state.bus.emit("directus:changed");
 }
 
 async function safelyLoadData(){
@@ -83,6 +86,19 @@ async function safelyLoadData(){
   state.tx = await safelyLoad("movimientos", () => listTransactions(), []);
   state.budgetRows = await safelyLoad("presupuestos", () => listBudgets(), []);
   state.budgets = syncBudgetMapFromRows(state.budgetRows);
+  const dxSession = await safelyLoad("sesión Directus", () => ensureDirectusSession(), { ok:true, connected:false, permissions:[], abilities:{} });
+  state.directus = {
+    connected: Boolean(dxSession?.connected),
+    baseUrl: dxSession?.baseUrl || "https://directus.drperez86.com",
+    user: dxSession?.user || null,
+    role: dxSession?.role || null,
+    permissions: dxSession?.permissions || [],
+    abilities: dxSession?.abilities || {},
+    access_token: dxSession?.access_token || "",
+    refresh_token: dxSession?.refresh_token || "",
+    expires: Number(dxSession?.expires || 0),
+    lastError: dxSession?.ok === false ? (dxSession?.error || null) : null
+  };
 }
 
 async function safelyLoad(label, fn, fallback){
