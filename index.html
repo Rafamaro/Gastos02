@@ -21,7 +21,7 @@
           </svg>
         </div>
         <div>
-          <h1>Ingresos & Gastos <span class="version-badge" id="appVersionBadge">Versión 1.25</span></h1>
+          <h1>Ingresos & Gastos <span class="version-badge" id="appVersionBadge">Versión —</span></h1>
         </div>
       </div>
 
@@ -521,7 +521,40 @@ Finanzas"></textarea>
     })();
   </script>
 
-  <!-- App (ES Modules) -->
-  <script type="module" src="./assets/js/app.js"></script>
+  <!-- App (ES Modules) con cache-bust por versión -->
+  <script>
+    (function(){
+      const APP_VERSION = "1.28";
+      window.__APP_VERSION__ = APP_VERSION;
+
+      const withV = (path) => `${path}?v=${encodeURIComponent(APP_VERSION)}`;
+      const importMap = {
+        scopes: {
+          "/assets/js/": {
+            "./utils.js": withV("/assets/js/utils.js"),
+            "./storage.js": withV("/assets/js/storage.js"),
+            "./constants.js": withV("/assets/js/constants.js"),
+            "./router.js": withV("/assets/js/router.js"),
+            "./ingreso.js": withV("/assets/js/ingreso.js"),
+            "./dashboard.js": withV("/assets/js/dashboard.js"),
+            "./config.js": withV("/assets/js/config.js"),
+            "./export.js": withV("/assets/js/export.js"),
+            "./dataStore.js": withV("/assets/js/dataStore.js"),
+            "./directusClient.js": withV("/assets/js/directusClient.js")
+          }
+        }
+      };
+
+      const importMapScript = document.createElement("script");
+      importMapScript.type = "importmap";
+      importMapScript.textContent = JSON.stringify(importMap);
+      document.currentScript.after(importMapScript);
+
+      const appScript = document.createElement("script");
+      appScript.type = "module";
+      appScript.src = withV("./assets/js/app.js");
+      importMapScript.after(appScript);
+    })();
+  </script>
 </body>
 </html>
