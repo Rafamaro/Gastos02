@@ -110,9 +110,9 @@ async function detectSettingsCollectionKey(){
   const collectionsMap = await listCollections();
   const rows = Object.values(collectionsMap || {});
   if(collectionsMap?.settings){
-    localStorage.setItem(DIRECTUS_SETTINGS_COLLECTION_KEY, "settings");
+    localStorage.setItem(DIRECTUS_SETTINGS_COLLECTION_KEY, "app_settings");
     localStorage.removeItem(DIRECTUS_SETTINGS_COLLECTION_ERROR_KEY);
-    return "settings";
+    return "app_settings";
   }
 
   let best = null;
