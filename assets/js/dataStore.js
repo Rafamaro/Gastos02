@@ -6,7 +6,7 @@ import * as directusClientModule from "./directusClient.js";
 const {
   setDirectusConfig,
   ping,
-  listCollections,
+  listCollections: listCollectionsRaw,
   getItems,
   createItem,
   updateItem,
@@ -19,8 +19,8 @@ const {
   getSessionStatus
 } = directusClientModule;
 
-const listCollections = typeof directusClientModule.listCollections === "function"
-  ? directusClientModule.listCollections
+const listCollections = typeof listCollectionsRaw === "function"
+  ? listCollectionsRaw
   : async () => ({});
 
 const BACKEND_KEY = "gastos02_backend";
