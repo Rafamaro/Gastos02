@@ -379,6 +379,7 @@ Finanzas"></textarea>
             <button class="btn" id="btnImportDirectus">Importar a Directus</button>
             <span class="hint" id="directusImportProgress"></span>
             <span class="hint" id="directus-session-state">Directus: No conectado</span>
+            <span class="hint" id="directus-settings-collection-state">Colección settings detectada: —</span>
           </div>
         </div>
       </div>
@@ -525,7 +526,7 @@ Finanzas"></textarea>
   <!-- App (ES Modules) con cache-bust por build timestamp -->
   <script>
     window.__BUILD_TIMESTAMP__ = String(Date.now());
-    window.__APP_VERSION__ = "1.32";
+    window.__APP_VERSION__ = "1.33";
   </script>
   <script type="module">
     const ts = encodeURIComponent(String(window.__BUILD_TIMESTAMP__ || Date.now()));

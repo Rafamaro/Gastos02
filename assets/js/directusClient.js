@@ -425,6 +425,25 @@ export async function ping(){
   return request("/server/ping", { method: "GET", requiresAuth: false });
 }
 
+export async function listCollections(){
+  const out = await request("/collections", { method: "GET" });
+  const rows = Array.isArray(out?.data) ? out.data : (Array.isArray(out) ? out : []);
+  const map = {};
+
+  for(const row of rows){
+    const key = String(row?.collection || "").trim();
+    if(!key) continue;
+    map[key] = {
+      collection: key,
+      icon: row?.meta?.icon || null,
+      note: row?.meta?.note || null,
+      singleton: Boolean(row?.meta?.singleton)
+    };
+  }
+
+  return map;
+}
+
 export async function getItems(collection, params = {}){
   const out = await request(`/items/${collection}${toQuery(params)}`, { method: "GET" });
   if(Array.isArray(out?.data)) return out.data;
@@ -466,6 +485,7 @@ export const directusClient = {
   getSessionStatus,
   setDirectusConfig,
   ping,
+  listCollections,
   getItems,
   createItem,
   updateItem,
