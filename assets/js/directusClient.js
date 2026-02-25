@@ -6,8 +6,32 @@ const LS_ACCESS = "gastos02_directus_access_token";
 const LS_REFRESH = "gastos02_directus_refresh_token";
 const DIRECTUS_USER_EMAIL_KEY = "gastos02_directus_user_email";
 
+function normalizeDirectusBaseUrl(input){
+  const raw = typeof input === "string" ? input.trim() : "";
+  if(!raw) return DEFAULT_BASE_URL;
+
+  const withScheme = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+
+  try{
+    const parsed = new URL(withScheme);
+    const parts = parsed.pathname.split("/").filter(Boolean);
+
+    const cutBy = ["admin", "items", "auth", "server", "content"];
+    let cutAt = parts.length;
+    for(const marker of cutBy){
+      const idx = parts.indexOf(marker);
+      if(idx >= 0) cutAt = Math.min(cutAt, idx);
+    }
+
+    const basePath = `/${parts.slice(0, cutAt).join("/")}`.replace(/\/$/, "") || "";
+    return `${parsed.origin}${basePath}`;
+  }catch(_err){
+    return DEFAULT_BASE_URL;
+  }
+}
+
 const cfg = {
-  baseUrl: localStorage.getItem("gastos02_directus_url") || DEFAULT_BASE_URL,
+  baseUrl: normalizeDirectusBaseUrl(localStorage.getItem("gastos02_directus_url") || DEFAULT_BASE_URL),
   serviceEmail: window.__GASTOS02_DIRECTUS_SERVICE_EMAIL || localStorage.getItem(DIRECTUS_SERVICE_EMAIL_KEY) || "",
   servicePassword: window.__GASTOS02_DIRECTUS_SERVICE_PASSWORD || localStorage.getItem(DIRECTUS_SERVICE_PASSWORD_KEY) || "",
   accessToken: localStorage.getItem(LS_ACCESS) || "",
@@ -22,12 +46,13 @@ const TOKEN_KEYS = {
   email: DIRECTUS_USER_EMAIL_KEY
 };
 
+// Si había quedado guardada una URL de admin/content/items, normalizamos y persistimos.
+localStorage.setItem("gastos02_directus_url", cfg.baseUrl);
+
 export function setDirectusConfig({ baseUrl, serviceEmail, servicePassword } = {}){
   if(typeof baseUrl === "string" && baseUrl.trim()){
-    // Aceptar URLs sin esquema (ej: "directus.dominio.com")
-    const raw = baseUrl.trim();
-    const withScheme = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
-    const nextBaseUrl = withScheme.replace(/\/$/, "");
+    // Aceptar URLs del admin o endpoint y convertirlas al base URL del API
+    const nextBaseUrl = normalizeDirectusBaseUrl(baseUrl);
     if(nextBaseUrl !== cfg.baseUrl){
       cfg.baseUrl = nextBaseUrl;
       clearSession();
