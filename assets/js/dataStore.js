@@ -69,14 +69,20 @@ function budgetRowsToLocal(rows){
   return out;
 }
 
+function firstRow(rows){
+  return Array.isArray(rows) ? (rows[0] || null) : null;
+}
+
 export async function getSettings(){
   if(!isDirectus()) return loadConfig();
   try{
-    const [settings] = await getItems("settings", { limit: 1, fields: ["id", "locale", "base_currency.code"] });
+    const settingsRows = await getItems("settings", { limit: 1, fields: ["id", "locale", "base_currency.code"] });
+    const settings = firstRow(settingsRows);
     if(!settings){
       await createItem("settings", { base_currency: defaults.baseCurrency, locale: defaults.locale });
     }
-    const settingRow = settings || (await getItems("settings", { limit: 1, fields: ["id", "locale", "base_currency.code"] }))[0];
+    const settingRows = settings ? [settings] : await getItems("settings", { limit: 1, fields: ["id", "locale", "base_currency.code"] });
+    const settingRow = firstRow(settingRows);
     const currencies = await listCurrencies();
     const cats = await getItems("categories", { fields: ["id","name","type","group.id","group.name"] });
     const groups = await getItems("expense_groups", { fields: ["id","name","description"] });
@@ -92,7 +98,7 @@ export async function getSettings(){
     });
   }catch(err){
     console.warn("No se pudieron cargar settings", err);
-    return null;
+    return mergeConfig(loadConfig());
   }
 }
 
@@ -105,7 +111,8 @@ export async function saveSettings(payload){
 
   const current = await getSettings();
   const merged = mergeConfig({ ...current, ...payload });
-  const [existing] = await getItems("settings", { limit: 1 });
+  const existingRows = await getItems("settings", { limit: 1 });
+  const existing = firstRow(existingRows);
   const body = { base_currency: merged.baseCurrency, locale: merged.locale };
   if(existing?.id) await updateItem("settings", existing.id, body);
   else await createItem("settings", body);
