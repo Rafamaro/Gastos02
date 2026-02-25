@@ -51,6 +51,17 @@ function authHeaders(access_token){
   };
 }
 
+function buildQuery(query = {}){
+  const params = new URLSearchParams();
+  Object.entries(query || {}).forEach(([key, value]) => {
+    if(value === undefined || value === null || value === "") return;
+    if(typeof value === "object") params.set(key, JSON.stringify(value));
+    else params.set(key, String(value));
+  });
+  const encoded = params.toString();
+  return encoded ? `?${encoded}` : "";
+}
+
 export function saveSession(session = {}){
   const normalized = {
     baseUrl: normalizeBaseUrl(session.baseUrl),
@@ -231,4 +242,73 @@ export async function ensureSession(){
     clearSession();
     return { connected: false, baseUrl: normalizeBaseUrl(session.baseUrl), error: err };
   }
+}
+
+export async function requestAuthed({ baseUrl, access_token, path, method = "GET", body, fallbackMessage } = {}){
+  if(!access_token) throw makeError("No hay access_token para operar con Directus.");
+  const cleanBaseUrl = normalizeBaseUrl(baseUrl);
+  const options = { method, headers: authHeaders(access_token) };
+  if(body !== undefined) options.body = JSON.stringify(body);
+  return requestJson(
+    `${cleanBaseUrl}${path}`,
+    options,
+    fallbackMessage || "No se pudo completar la operación con Directus"
+  );
+}
+
+export async function listItems({ baseUrl, access_token, collection, query } = {}){
+  const payload = await requestAuthed({
+    baseUrl,
+    access_token,
+    path: `/items/${collection}${buildQuery(query)}`,
+    fallbackMessage: `No se pudo listar ${collection}`
+  });
+  return Array.isArray(payload?.data) ? payload.data : [];
+}
+
+export async function createItem({ baseUrl, access_token, collection, data } = {}){
+  const payload = await requestAuthed({
+    baseUrl,
+    access_token,
+    path: `/items/${collection}`,
+    method: "POST",
+    body: data,
+    fallbackMessage: `No se pudo crear en ${collection}`
+  });
+  return payload?.data || null;
+}
+
+export async function createItems({ baseUrl, access_token, collection, data } = {}){
+  const payload = await requestAuthed({
+    baseUrl,
+    access_token,
+    path: `/items/${collection}`,
+    method: "POST",
+    body: data,
+    fallbackMessage: `No se pudo crear lote en ${collection}`
+  });
+  return Array.isArray(payload?.data) ? payload.data : [];
+}
+
+export async function updateItem({ baseUrl, access_token, collection, id, data } = {}){
+  const payload = await requestAuthed({
+    baseUrl,
+    access_token,
+    path: `/items/${collection}/${id}`,
+    method: "PATCH",
+    body: data,
+    fallbackMessage: `No se pudo actualizar ${collection}`
+  });
+  return payload?.data || null;
+}
+
+export async function deleteItem({ baseUrl, access_token, collection, id } = {}){
+  await requestAuthed({
+    baseUrl,
+    access_token,
+    path: `/items/${collection}/${id}`,
+    method: "DELETE",
+    fallbackMessage: `No se pudo eliminar ${collection}`
+  });
+  return true;
 }

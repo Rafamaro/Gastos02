@@ -2,9 +2,44 @@ import { defaults } from "./constants.js";
 import { mergeConfig, loadConfig, saveConfig, loadTransactions, saveTransactions, loadBudgets, saveBudgets } from "./storage.js";
 import { normalizeTx } from "./utils.js";
 import { ensureSession as ensureDirectusClientSession } from "./directusClient.js";
+import { listItems, createItem, createItems, updateItem, deleteItem } from "./directusClient.js";
 
 const GROUP_PREFIX = "__group__::";
 const PAYLOAD_GROUP_PREFIX = "[GRUPO] ";
+const COLLECTIONS = {
+  categories: "categories",
+  groups: "groups",
+  movements: "movements",
+  budgets: "budgets",
+  settings: "settings",
+  importsLog: "imports_log"
+};
+
+async function getDirectusSession(){
+  try{
+    const session = await ensureDirectusClientSession();
+    return session?.connected ? session : null;
+  }catch(_err){
+    return null;
+  }
+}
+
+function directusArgs(session){
+  return { baseUrl: session.baseUrl, access_token: session.access_token };
+}
+
+async function resolveCategoryIdByName(session, categoryName, type = "expense"){
+  const list = await listItems({
+    ...directusArgs(session),
+    collection: COLLECTIONS.categories,
+    query: {
+      limit: 1,
+      filter: { name: { _eq: String(categoryName || "").trim() }, type: { _eq: type === "income" ? "income" : "expense" } },
+      fields: ["id"]
+    }
+  });
+  return list[0]?.id || null;
+}
 
 export function getBackendMode(){
   return "local";
@@ -39,6 +74,14 @@ function budgetRowsToLocal(rows){
 }
 
 export async function getSettings(){
+  const session = await getDirectusSession();
+  if(session){
+    const rows = await listItems({ ...directusArgs(session), collection: COLLECTIONS.settings, query: { fields: ["key", "value"], limit: 200 } });
+    if(rows.length){
+      const cfg = rows.reduce((acc, row) => ({ ...acc, [row.key]: row.value }), {});
+      return mergeConfig(cfg);
+    }
+  }
   return mergeConfig(loadConfig());
 }
 
@@ -47,6 +90,17 @@ export async function saveSettings(payload){
   merged.expenseCategories = unique(merged.expenseCategories);
   merged.incomeCategories = unique(merged.incomeCategories);
   merged.expenseGroups = unique(merged.expenseGroups);
+  const session = await getDirectusSession();
+  if(session){
+    const entries = Object.entries(merged);
+    const existing = await listItems({ ...directusArgs(session), collection: COLLECTIONS.settings, query: { fields: ["id", "key"], limit: 500 } });
+    const byKey = new Map(existing.map(x => [x.key, x.id]));
+    for(const [key, value] of entries){
+      const id = byKey.get(key);
+      if(id) await updateItem({ ...directusArgs(session), collection: COLLECTIONS.settings, id, data: { value } });
+      else await createItem({ ...directusArgs(session), collection: COLLECTIONS.settings, data: { key, value } });
+    }
+  }
   saveConfig(merged);
   return merged;
 }
@@ -56,12 +110,20 @@ export async function listCurrencies(){
 }
 
 export async function listGroups(){
+  const session = await getDirectusSession();
+  if(session){
+    return listItems({ ...directusArgs(session), collection: COLLECTIONS.groups, query: { fields: ["id", "name", "type", "sort", "color", "icon", "is_active"], sort: ["sort", "name"], limit: 500 } });
+  }
   return (loadConfig().expenseGroups || []).map(name => ({ id: name, name, description: "" }));
 }
 
 export async function createGroup({ name, description } = {}){
   const safeName = String(name || "").trim();
   if(!safeName) throw new Error("Nombre de grupo inválido");
+  const session = await getDirectusSession();
+  if(session){
+    return createItem({ ...directusArgs(session), collection: COLLECTIONS.groups, data: { name: safeName, type: "expense", is_active: true, sort: null, color: null, icon: null, description } });
+  }
   const cfg = loadConfig();
   cfg.expenseGroups = unique([...(cfg.expenseGroups || []), safeName]);
   saveConfig(cfg);
@@ -72,6 +134,11 @@ export async function updateGroup(id, payload = {}){
   const oldName = String(id || "").trim();
   const newName = String(payload.name || oldName).trim();
   if(!oldName || !newName) throw new Error("Nombre de grupo inválido");
+
+  const session = await getDirectusSession();
+  if(session){
+    return updateItem({ ...directusArgs(session), collection: COLLECTIONS.groups, id, data: payload });
+  }
 
   const cfg = loadConfig();
   cfg.expenseGroups = (cfg.expenseGroups || []).map(g => g === oldName ? newName : g);
@@ -99,6 +166,12 @@ export async function updateGroup(id, payload = {}){
 }
 
 export async function listCategories({ type } = {}){
+  const session = await getDirectusSession();
+  if(session){
+    const query = { fields: ["id", "name", "type", "group", "group.id", "group.name", "sort", "color", "icon", "is_active"], sort: ["sort", "name"], limit: 1000 };
+    if(type) query.filter = { type: { _eq: type } };
+    return listItems({ ...directusArgs(session), collection: COLLECTIONS.categories, query });
+  }
   const cfg = loadConfig();
   const local = [
     ...(cfg.expenseCategories || []).map(name => ({
@@ -117,6 +190,15 @@ export async function createCategory({ name, type, group } = {}){
   const safeType = type === "income" ? "income" : "expense";
   if(!safeName) throw new Error("Nombre de categoría inválido");
 
+  const session = await getDirectusSession();
+  if(session){
+    return createItem({
+      ...directusArgs(session),
+      collection: COLLECTIONS.categories,
+      data: { name: safeName, type: safeType, group: group?.id || group || null, is_active: true }
+    });
+  }
+
   const cfg = loadConfig();
   const arr = safeType === "income" ? cfg.incomeCategories : cfg.expenseCategories;
   if(!arr.includes(safeName)) arr.push(safeName);
@@ -132,6 +214,11 @@ export async function createCategory({ name, type, group } = {}){
 }
 
 export async function updateCategory(id, payload = {}){
+  const session = await getDirectusSession();
+  if(session){
+    return updateItem({ ...directusArgs(session), collection: COLLECTIONS.categories, id, data: { ...payload, group: payload.group?.id || payload.group || null } });
+  }
+
   const { type: idType, name: idName } = parseCategoryId(id);
   const nextType = payload.type || idType;
   const nextName = String(payload.name || idName).trim();
@@ -171,6 +258,8 @@ export async function updateCategory(id, payload = {}){
 }
 
 export async function deleteCategory(id){
+  const session = await getDirectusSession();
+  if(session) return deleteItem({ ...directusArgs(session), collection: COLLECTIONS.categories, id });
   const { type, name } = parseCategoryId(id);
   if(!name) return true;
 
@@ -189,10 +278,52 @@ export async function deleteCategory(id){
 }
 
 export async function listTransactions(){
+  const session = await getDirectusSession();
+  if(session){
+    const rows = await listItems({
+      ...directusArgs(session),
+      collection: COLLECTIONS.movements,
+      query: { fields: ["id", "date", "amount", "type", "note", "source", "imported_batch_id", "category", "category.id", "category.name", "group_snapshot"], sort: ["-date"], limit: 2000 }
+    });
+    return rows.map(row => ({
+      id: row.id,
+      date: row.date,
+      amount: Number(row.amount) || 0,
+      type: row.type,
+      category: row.category?.name || "",
+      desc: row.note || "",
+      notes: row.note || "",
+      pay: row.source || "",
+      currency: loadConfig().baseCurrency,
+      group_snapshot: row.group_snapshot || "",
+      imported_batch_id: row.imported_batch_id || ""
+    }));
+  }
   return loadTransactions(loadConfig());
 }
 
 export async function createTransaction(payload){
+  const session = await getDirectusSession();
+  if(session){
+    const normalized = normalizeTx(payload, loadConfig());
+    const categoryId = await resolveCategoryIdByName(session, normalized.category, normalized.type);
+    if(!categoryId) throw new Error(`No existe categoría '${normalized.category}' (${normalized.type}) en Directus`);
+    const saved = await createItem({
+      ...directusArgs(session),
+      collection: COLLECTIONS.movements,
+      data: {
+        date: normalized.date,
+        amount: Number(normalized.amount) || 0,
+        type: normalized.type,
+        category: categoryId,
+        note: normalized.notes || normalized.desc || "",
+        source: normalized.pay || "manual",
+        group_snapshot: "",
+        imported_batch_id: normalized.imported_batch_id || null
+      }
+    });
+    return { ...normalized, id: saved?.id || normalized.id };
+  }
   const cfg = loadConfig();
   const tx = loadTransactions(cfg);
   const normalized = normalizeTx(payload, cfg);
@@ -202,6 +333,16 @@ export async function createTransaction(payload){
 }
 
 export async function updateTransaction(id, payload){
+  const session = await getDirectusSession();
+  if(session){
+    const data = { ...payload };
+    if(payload?.category){
+      const categoryId = await resolveCategoryIdByName(session, payload.category, payload.type || "expense");
+      if(categoryId) data.category = categoryId;
+    }
+    if(payload?.notes || payload?.desc) data.note = payload.notes || payload.desc;
+    return updateItem({ ...directusArgs(session), collection: COLLECTIONS.movements, id, data });
+  }
   const cfg = loadConfig();
   const tx = loadTransactions(cfg);
   const idx = tx.findIndex(x => x.id === id);
@@ -214,6 +355,8 @@ export async function updateTransaction(id, payload){
 }
 
 export async function deleteTransaction(id){
+  const session = await getDirectusSession();
+  if(session) return deleteItem({ ...directusArgs(session), collection: COLLECTIONS.movements, id });
   const cfg = loadConfig();
   const tx = loadTransactions(cfg).filter(x => x.id !== id);
   saveTransactions(tx);
@@ -221,6 +364,19 @@ export async function deleteTransaction(id){
 }
 
 export async function listBudgets({ month } = {}){
+  const session = await getDirectusSession();
+  if(session){
+    const query = { fields: ["id", "month", "amount", "group", "group.id", "group.name", "category", "category.id", "category.name"], limit: 2000 };
+    if(month) query.filter = { month: { _eq: month } };
+    const rows = await listItems({ ...directusArgs(session), collection: COLLECTIONS.budgets, query });
+    return rows.map(row => ({
+      id: row.id,
+      month: row.month,
+      amount: Number(row.amount) || 0,
+      currency: { code: loadConfig().baseCurrency },
+      category: { name: row.group?.name ? `${PAYLOAD_GROUP_PREFIX}${row.group.name}` : (row.category?.name || ""), type: "expense" }
+    }));
+  }
   const map = loadBudgets();
   const rows = [];
 
@@ -247,6 +403,33 @@ export async function upsertBudget({ month, category, amount, currency }){
   const safeCategory = String(category || "").trim();
   if(!safeCategory) throw new Error("Categoría inválida");
 
+  const session = await getDirectusSession();
+  if(session){
+    const isGroup = safeCategory.startsWith(PAYLOAD_GROUP_PREFIX);
+    const entityName = isGroup ? safeCategory.replace(PAYLOAD_GROUP_PREFIX, "") : safeCategory;
+    const existing = await listItems({
+      ...directusArgs(session),
+      collection: COLLECTIONS.budgets,
+      query: {
+        limit: 1,
+        fields: ["id"],
+        filter: isGroup
+          ? { month: { _eq: safeMonth }, group: { name: { _eq: entityName } } }
+          : { month: { _eq: safeMonth }, category: { name: { _eq: entityName } } }
+      }
+    });
+    let payload = { month: safeMonth, amount: Number(amount) || 0, group: null, category: null };
+    if(isGroup){
+      const groups = await listItems({ ...directusArgs(session), collection: COLLECTIONS.groups, query: { limit: 1, fields: ["id"], filter: { name: { _eq: entityName } } } });
+      payload.group = groups[0]?.id || null;
+    }else{
+      payload.category = await resolveCategoryIdByName(session, entityName, "expense");
+    }
+    if(existing[0]?.id) await updateItem({ ...directusArgs(session), collection: COLLECTIONS.budgets, id: existing[0].id, data: payload });
+    else await createItem({ ...directusArgs(session), collection: COLLECTIONS.budgets, data: payload });
+    return { month: safeMonth, category: safeCategory, amount: Number(amount) || 0, currency };
+  }
+
   const map = loadBudgets();
   if(!map[safeMonth]) map[safeMonth] = {};
   map[safeMonth][safeCategory] = Number(amount) || 0;
@@ -255,6 +438,8 @@ export async function upsertBudget({ month, category, amount, currency }){
 }
 
 export async function deleteBudget(id){
+  const session = await getDirectusSession();
+  if(session) return deleteItem({ ...directusArgs(session), collection: COLLECTIONS.budgets, id });
   const raw = String(id || "");
   const sep = raw.indexOf(":");
   if(sep < 0) return true;
@@ -272,6 +457,79 @@ export async function deleteBudget(id){
 
 export function syncBudgetMapFromRows(rows){
   return budgetRowsToLocal(rows);
+}
+
+export async function importMonthlyJson({ batchId, month, movements = [], source = "json" } = {}){
+  const session = await getDirectusSession();
+  if(!session) throw new Error("Import JSON requiere sesión activa en Directus");
+
+  const safeBatchId = String(batchId || `${month || ""}:${movements.length}`).trim();
+  if(!safeBatchId) throw new Error("imported_batch_id inválido");
+
+  const existing = await listItems({
+    ...directusArgs(session),
+    collection: COLLECTIONS.movements,
+    query: { fields: ["id"], limit: 1, filter: { imported_batch_id: { _eq: safeBatchId } } }
+  });
+  if(existing.length){
+    return { skipped: true, reason: "batch_exists", imported_batch_id: safeBatchId, inserted: 0 };
+  }
+
+  const categories = await listItems({ ...directusArgs(session), collection: COLLECTIONS.categories, query: { fields: ["id", "name", "type", "group", "group.id", "group.name"], limit: 2000 } });
+  const groups = await listItems({ ...directusArgs(session), collection: COLLECTIONS.groups, query: { fields: ["id", "name", "type"], limit: 1000 } });
+  const categoryMap = new Map(categories.map(c => [`${c.type}:${c.name}`.toLowerCase(), c]));
+  const groupMap = new Map(groups.map(g => [String(g.name || "").toLowerCase(), g]));
+
+  for(const mov of movements){
+    const safeType = mov.type === "income" ? "income" : "expense";
+    const safeName = String(mov.category || "").trim();
+    if(!safeName) continue;
+    const key = `${safeType}:${safeName}`.toLowerCase();
+    if(!categoryMap.has(key)){
+      const groupName = String(mov.group || "").trim();
+      let groupId = null;
+      if(groupName){
+        const gKey = groupName.toLowerCase();
+        if(!groupMap.has(gKey)){
+          const createdGroup = await createItem({ ...directusArgs(session), collection: COLLECTIONS.groups, data: { name: groupName, type: safeType, is_active: true } });
+          groupMap.set(gKey, createdGroup);
+        }
+        groupId = groupMap.get(gKey)?.id || null;
+      }
+      const createdCategory = await createItem({ ...directusArgs(session), collection: COLLECTIONS.categories, data: { name: safeName, type: safeType, group: groupId, is_active: true } });
+      categoryMap.set(key, createdCategory);
+    }
+  }
+
+  const payload = movements.map(mov => {
+    const safeType = mov.type === "income" ? "income" : "expense";
+    const safeName = String(mov.category || "").trim();
+    const category = categoryMap.get(`${safeType}:${safeName}`.toLowerCase());
+    return {
+      date: mov.date,
+      amount: Number(mov.amount) || 0,
+      type: safeType,
+      category: category?.id,
+      group_snapshot: mov.group || category?.group?.name || "",
+      note: mov.note || mov.notes || mov.desc || "",
+      source,
+      imported_batch_id: safeBatchId
+    };
+  }).filter(x => x.category && x.date);
+
+  const inserted = payload.length ? await createItems({ ...directusArgs(session), collection: COLLECTIONS.movements, data: payload }) : [];
+  await createItem({
+    ...directusArgs(session),
+    collection: COLLECTIONS.importsLog,
+    data: {
+      month: month || "",
+      source,
+      status: "ok",
+      summary: { received: movements.length, inserted: inserted.length, imported_batch_id: safeBatchId }
+    }
+  });
+
+  return { skipped: false, imported_batch_id: safeBatchId, inserted: inserted.length };
 }
 
 export async function ensureDirectusSession(){
