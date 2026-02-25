@@ -1,76 +1,35 @@
 import { defaults } from "./constants.js";
 import { mergeConfig, loadConfig, saveConfig, loadTransactions, saveTransactions, loadBudgets, saveBudgets } from "./storage.js";
 import { normalizeTx } from "./utils.js";
-import * as directusClientModule from "./directusClient.js";
 
-const {
-  setDirectusConfig,
-  ping,
-  listCollections: listCollectionsRaw,
-  getItems,
-  createItem,
-  updateItem,
-  deleteItem,
-  findOneByFilter,
-  upsertByUnique,
-  login: directusLogin,
-  ensureAuth,
-  clearSession,
-  getSessionStatus
-} = directusClientModule;
-
-const listCollections = typeof listCollectionsRaw === "function"
-  ? listCollectionsRaw
-  : async () => ({});
-
-const BACKEND_KEY = "gastos02_backend";
-const DIRECTUS_URL_KEY = "gastos02_directus_url";
-const DIRECTUS_SERVICE_EMAIL_KEY = "gastos02_directus_service_email";
-const DIRECTUS_SERVICE_PASSWORD_KEY = "gastos02_directus_service_password";
-const DIRECTUS_SETTINGS_COLLECTION_KEY = "directus_settings_collection_key";
-const DIRECTUS_SETTINGS_COLLECTION_ERROR_KEY = "directus_settings_collection_error";
 const GROUP_PREFIX = "__group__::";
 const PAYLOAD_GROUP_PREFIX = "[GRUPO] ";
 
 export function getBackendMode(){
-  return localStorage.getItem(BACKEND_KEY) === "directus" ? "directus" : "local";
+  return "local";
 }
 
-export function setBackendMode(mode){
-  const next = mode === "directus" ? "directus" : "local";
-  localStorage.setItem(BACKEND_KEY, next);
+export function setBackendMode(){
+  return "local";
 }
 
-export function getDirectusConfig(){
-  return {
-    baseUrl: localStorage.getItem(DIRECTUS_URL_KEY) || "https://directus.drperez86.com",
-    serviceEmail: localStorage.getItem(DIRECTUS_SERVICE_EMAIL_KEY) || "",
-    servicePassword: localStorage.getItem(DIRECTUS_SERVICE_PASSWORD_KEY) || ""
-  };
+function unique(list){
+  return Array.from(new Set((list || []).map(x => String(x || "").trim()).filter(Boolean)));
 }
 
-export function setDirectusSettings({ baseUrl, serviceEmail, servicePassword }){
-  setDirectusConfig({ baseUrl, serviceEmail, servicePassword });
-}
-
-function isDirectus(){
-  return getBackendMode() === "directus";
-}
-
-function categoryToGroupMap(categories){
-  const map = {};
-  for(const c of categories){
-    if(c.type === "expense" && c.group?.name) map[c.name] = c.group.name;
-  }
-  return map;
+function parseCategoryId(id){
+  const [type, ...rest] = String(id || "").split(":");
+  return { type, name: rest.join(":") };
 }
 
 function budgetRowsToLocal(rows){
   const out = {};
-  for(const b of rows){
-    const month = b.month;
+  for(const b of rows || []){
+    const month = String(b.month || "").trim();
+    if(!month) continue;
     if(!out[month]) out[month] = {};
-    const rawName = b.category?.name || "";
+
+    const rawName = String(b.category?.name || "");
     const isGroup = rawName.startsWith(PAYLOAD_GROUP_PREFIX);
     const key = isGroup ? `${GROUP_PREFIX}${rawName.replace(PAYLOAD_GROUP_PREFIX, "")}` : rawName;
     if(key) out[month][key] = Number(b.amount) || 0;
@@ -78,427 +37,242 @@ function budgetRowsToLocal(rows){
   return out;
 }
 
-function firstRow(rows){
-  return Array.isArray(rows) ? (rows[0] || null) : null;
-}
-
-function settingsCollectionMessage(key){
-  return key
-    ? `Colección settings detectada: ${key}`
-    : "No existe colección settings en Directus. Revisá el key real en Settings → Data Model.";
-}
-
-function scoreSettingsCandidate(item){
-  const key = String(item?.collection || "").toLowerCase();
-  const note = String(item?.note || "").toLowerCase();
-  const icon = String(item?.icon || "").toLowerCase();
-  const hasSettings = key.includes("settings") || note.includes("settings") || icon.includes("settings");
-  if(!hasSettings) return -1;
-  let score = 1;
-  if(key === "settings") score += 100;
-  if(key.includes("settings")) score += 10;
-  if(note.includes("settings")) score += 3;
-  if(icon.includes("settings")) score += 2;
-  if(item?.singleton && key.includes("settings")) score += 20;
-  return score;
-}
-
-async function detectSettingsCollectionKey(){
-  const cached = String(localStorage.getItem(DIRECTUS_SETTINGS_COLLECTION_KEY) || "").trim();
-  if(cached) return cached;
-
-  const collectionsMap = await listCollections();
-  const rows = Object.values(collectionsMap || {});
-  if(collectionsMap?.settings){
-    localStorage.setItem(DIRECTUS_SETTINGS_COLLECTION_KEY, "app_settings");
-    localStorage.removeItem(DIRECTUS_SETTINGS_COLLECTION_ERROR_KEY);
-    return "app_settings";
-  }
-
-  let best = null;
-  let bestScore = -1;
-  for(const row of rows){
-    const score = scoreSettingsCandidate(row);
-    if(score > bestScore){
-      bestScore = score;
-      best = row;
-    }
-  }
-
-  const key = String(best?.collection || "").trim();
-  if(key){
-    localStorage.setItem(DIRECTUS_SETTINGS_COLLECTION_KEY, key);
-    localStorage.removeItem(DIRECTUS_SETTINGS_COLLECTION_ERROR_KEY);
-    return key;
-  }
-
-  const msg = settingsCollectionMessage("");
-  localStorage.removeItem(DIRECTUS_SETTINGS_COLLECTION_KEY);
-  localStorage.setItem(DIRECTUS_SETTINGS_COLLECTION_ERROR_KEY, msg);
-  return null;
-}
-
-export async function getDirectusSettingsCollectionInfo(){
-  if(!isDirectus()) return { key: "settings", message: "Modo local", error: "" };
-  try{
-    const key = await detectSettingsCollectionKey();
-    const message = settingsCollectionMessage(key);
-    if(key) localStorage.removeItem(DIRECTUS_SETTINGS_COLLECTION_ERROR_KEY);
-    return { key, message, error: key ? "" : message };
-  }catch(err){
-    const error = err?.userMessage || err?.message || settingsCollectionMessage("");
-    localStorage.setItem(DIRECTUS_SETTINGS_COLLECTION_ERROR_KEY, error);
-    const cached = String(localStorage.getItem(DIRECTUS_SETTINGS_COLLECTION_KEY) || "").trim();
-    return { key: cached || null, message: settingsCollectionMessage(cached), error };
-  }
-}
-
 export async function getSettings(){
-  if(!isDirectus()) return loadConfig();
-  try{
-    const settingsCollection = await detectSettingsCollectionKey();
-    if(!settingsCollection){
-      const err = new Error(settingsCollectionMessage(""));
-      err.userMessage = settingsCollectionMessage("");
-      throw err;
-    }
-
-    const settingsRows = await getItems(settingsCollection, { limit: 1, fields: ["id", "locale", "base_currency.code"] });
-    const settings = firstRow(settingsRows);
-    if(!settings){
-      await createItem(settingsCollection, { base_currency: defaults.baseCurrency, locale: defaults.locale });
-    }
-    const settingRows = settings ? [settings] : await getItems(settingsCollection, { limit: 1, fields: ["id", "locale", "base_currency.code"] });
-    const settingRow = firstRow(settingRows);
-    const currencies = await listCurrencies();
-    const cats = await getItems("categories", { fields: ["id","name","type","group.id","group.name"] });
-    const groups = await getItems("expense_groups", { fields: ["id","name","description"] });
-
-    return mergeConfig({
-      baseCurrency: settingRow?.base_currency?.code || defaults.baseCurrency,
-      locale: settingRow?.locale || defaults.locale,
-      currencies: currencies.map(x=>x.code),
-      expenseCategories: cats.filter(x=>x.type==="expense").map(x=>x.name),
-      incomeCategories: cats.filter(x=>x.type==="income").map(x=>x.name),
-      expenseGroups: groups.map(x=>x.name),
-      expenseCategoryGroups: categoryToGroupMap(cats)
-    });
-  }catch(err){
-    console.warn("No se pudieron cargar settings", err);
-    return mergeConfig(loadConfig());
-  }
+  return mergeConfig(loadConfig());
 }
 
 export async function saveSettings(payload){
-  if(!isDirectus()){
-    const merged = mergeConfig({ ...loadConfig(), ...payload });
-    saveConfig(merged);
-    return merged;
-  }
-
-  const current = await getSettings();
-  const merged = mergeConfig({ ...current, ...payload });
-  const body = { base_currency: merged.baseCurrency, locale: merged.locale };
-
-  try{
-    const settingsCollection = await detectSettingsCollectionKey();
-    if(!settingsCollection){
-      console.warn(settingsCollectionMessage(""));
-      return merged;
-    }
-
-    const existingRows = await getItems(settingsCollection, { limit: 1 });
-    const existing = firstRow(existingRows);
-    if(existing?.id) await updateItem(settingsCollection, existing.id, body);
-    else await createItem(settingsCollection, body);
-  }catch(err){
-    // Si Directus no tiene la colección/endpoint settings, no bloqueamos el flujo
-    console.warn("No se pudo guardar settings en Directus", err);
-  }
-
+  const merged = mergeConfig({ ...loadConfig(), ...(payload || {}) });
+  merged.expenseCategories = unique(merged.expenseCategories);
+  merged.incomeCategories = unique(merged.incomeCategories);
+  merged.expenseGroups = unique(merged.expenseGroups);
+  saveConfig(merged);
   return merged;
 }
 
 export async function listCurrencies(){
-  if(!isDirectus()) return (loadConfig().currencies || []).map(code => ({ code }));
-  return getItems("currencies", { sort: "code", fields: ["code"] });
+  return (loadConfig().currencies || []).map(code => ({ code }));
 }
 
 export async function listGroups(){
-  if(!isDirectus()) return (loadConfig().expenseGroups || []).map(name => ({ id:name, name, description:"" }));
-  return getItems("expense_groups", { sort: "name", fields: ["id", "name", "description"] });
+  return (loadConfig().expenseGroups || []).map(name => ({ id: name, name, description: "" }));
 }
 
-export async function createGroup({ name, description }){
-  if(!isDirectus()){
-    const cfg = loadConfig();
-    if(!cfg.expenseGroups.includes(name)) cfg.expenseGroups.push(name);
-    saveConfig(cfg);
-    return { id: name, name, description: description || "" };
-  }
-  return upsertByUnique("expense_groups", "name", name, { name, description: description || "" });
+export async function createGroup({ name, description } = {}){
+  const safeName = String(name || "").trim();
+  if(!safeName) throw new Error("Nombre de grupo inválido");
+  const cfg = loadConfig();
+  cfg.expenseGroups = unique([...(cfg.expenseGroups || []), safeName]);
+  saveConfig(cfg);
+  return { id: safeName, name: safeName, description: description || "" };
 }
 
-export async function updateGroup(id, payload){
-  if(!isDirectus()) return { id, ...payload };
-  return updateItem("expense_groups", id, payload);
+export async function updateGroup(id, payload = {}){
+  const oldName = String(id || "").trim();
+  const newName = String(payload.name || oldName).trim();
+  if(!oldName || !newName) throw new Error("Nombre de grupo inválido");
+
+  const cfg = loadConfig();
+  cfg.expenseGroups = (cfg.expenseGroups || []).map(g => g === oldName ? newName : g);
+  cfg.expenseGroups = unique(cfg.expenseGroups);
+
+  const map = { ...(cfg.expenseCategoryGroups || {}) };
+  Object.keys(map).forEach(cat => {
+    if(map[cat] === oldName) map[cat] = newName;
+  });
+  cfg.expenseCategoryGroups = map;
+  saveConfig(cfg);
+
+  const budgets = loadBudgets();
+  Object.keys(budgets).forEach(month => {
+    const sourceKey = `${GROUP_PREFIX}${oldName}`;
+    const targetKey = `${GROUP_PREFIX}${newName}`;
+    if(Object.prototype.hasOwnProperty.call(budgets[month] || {}, sourceKey)){
+      budgets[month][targetKey] = Number(budgets[month][sourceKey]) || 0;
+      delete budgets[month][sourceKey];
+    }
+  });
+  saveBudgets(budgets);
+
+  return { id: newName, name: newName, description: payload.description || "" };
 }
 
 export async function listCategories({ type } = {}){
-  if(!isDirectus()){
-    const cfg = loadConfig();
-    const local = [
-      ...cfg.expenseCategories.map(name=>({ id:`expense:${name}`, name, type:"expense", group: cfg.expenseCategoryGroups?.[name] ? { name: cfg.expenseCategoryGroups[name], type:"group" } : null })),
-      ...cfg.incomeCategories.map(name=>({ id:`income:${name}`, name, type:"income", group: null }))
-    ];
-    return type ? local.filter(x=>x.type===type) : local;
-  }
-  const filter = type ? { type: { _eq: type } } : undefined;
-  return getItems("categories", { filter, sort: "name", fields:["id","name","type","group.id","group.name"] });
+  const cfg = loadConfig();
+  const local = [
+    ...(cfg.expenseCategories || []).map(name => ({
+      id: `expense:${name}`,
+      name,
+      type: "expense",
+      group: cfg.expenseCategoryGroups?.[name] ? { name: cfg.expenseCategoryGroups[name], type: "group" } : null
+    })),
+    ...(cfg.incomeCategories || []).map(name => ({ id: `income:${name}`, name, type: "income", group: null }))
+  ];
+  return type ? local.filter(x => x.type === type) : local;
 }
 
-export async function createCategory({ name, type, group }){
-  if(!isDirectus()){
-    const cfg = loadConfig();
-    const arr = type === "income" ? cfg.incomeCategories : cfg.expenseCategories;
-    if(!arr.includes(name)) arr.push(name);
-    if(type === "expense" && group) cfg.expenseCategoryGroups[name] = group;
-    saveConfig(cfg);
-    return { id: `${type}:${name}`, name, type, group: group ? { name: group } : null };
+export async function createCategory({ name, type, group } = {}){
+  const safeName = String(name || "").trim();
+  const safeType = type === "income" ? "income" : "expense";
+  if(!safeName) throw new Error("Nombre de categoría inválido");
+
+  const cfg = loadConfig();
+  const arr = safeType === "income" ? cfg.incomeCategories : cfg.expenseCategories;
+  if(!arr.includes(safeName)) arr.push(safeName);
+
+  if(safeType === "expense"){
+    if(group) cfg.expenseCategoryGroups[safeName] = String(group).trim();
+  }else{
+    delete cfg.expenseCategoryGroups[safeName];
   }
 
-  const foundByName = await findOneByFilter("categories", { name: { _eq: name } });
-  let safeName = name;
-  if(foundByName && foundByName.type !== type){
-    safeName = `${name} (${type})`;
-  }
-  const groupRow = group ? await upsertByUnique("expense_groups", "name", group, { name: group, description: "" }) : null;
-  return upsertByUnique("categories", "name", safeName, { name: safeName, type, group: groupRow?.id || null });
+  saveConfig(cfg);
+  return { id: `${safeType}:${safeName}`, name: safeName, type: safeType, group: group ? { name: group } : null };
 }
 
-export async function updateCategory(id, payload){
-  if(!isDirectus()) return { id, ...payload };
-  return updateItem("categories", id, payload);
+export async function updateCategory(id, payload = {}){
+  const { type: idType, name: idName } = parseCategoryId(id);
+  const nextType = payload.type || idType;
+  const nextName = String(payload.name || idName).trim();
+  if(!idName || !nextName) throw new Error("Categoría inválida");
+
+  const cfg = loadConfig();
+  const fromArr = idType === "income" ? cfg.incomeCategories : cfg.expenseCategories;
+  const toArr = nextType === "income" ? cfg.incomeCategories : cfg.expenseCategories;
+
+  const fromIndex = fromArr.indexOf(idName);
+  if(fromIndex >= 0) fromArr.splice(fromIndex, 1);
+  if(!toArr.includes(nextName)) toArr.push(nextName);
+
+  if(nextType === "expense"){
+    const groupName = payload.group?.name || payload.group || cfg.expenseCategoryGroups[idName] || "";
+    if(groupName) cfg.expenseCategoryGroups[nextName] = String(groupName).trim();
+  }
+  delete cfg.expenseCategoryGroups[idName];
+  saveConfig(cfg);
+
+  const tx = loadTransactions(cfg).map(row => {
+    if(row.category !== idName) return row;
+    return { ...row, category: nextName, type: nextType };
+  });
+  saveTransactions(tx);
+
+  const budgets = loadBudgets();
+  Object.keys(budgets).forEach(month => {
+    if(Object.prototype.hasOwnProperty.call(budgets[month] || {}, idName)){
+      budgets[month][nextName] = Number(budgets[month][idName]) || 0;
+      delete budgets[month][idName];
+    }
+  });
+  saveBudgets(budgets);
+
+  return { id: `${nextType}:${nextName}`, name: nextName, type: nextType, group: cfg.expenseCategoryGroups[nextName] ? { name: cfg.expenseCategoryGroups[nextName] } : null };
 }
 
 export async function deleteCategory(id){
-  if(!isDirectus()) return true;
-  return deleteItem("categories", id);
+  const { type, name } = parseCategoryId(id);
+  if(!name) return true;
+
+  const cfg = loadConfig();
+  if(type === "income") cfg.incomeCategories = (cfg.incomeCategories || []).filter(c => c !== name);
+  else cfg.expenseCategories = (cfg.expenseCategories || []).filter(c => c !== name);
+  delete cfg.expenseCategoryGroups[name];
+  saveConfig(cfg);
+
+  const budgets = loadBudgets();
+  Object.keys(budgets).forEach(month => {
+    if(Object.prototype.hasOwnProperty.call(budgets[month] || {}, name)) delete budgets[month][name];
+  });
+  saveBudgets(budgets);
+  return true;
 }
 
-export async function listTransactions(filters = {}){
-  if(!isDirectus()) return loadTransactions(loadConfig());
-  const queryFilter = {};
-  if(filters.type) queryFilter.type = { _eq: filters.type };
-  if(filters.month) queryFilter.date = { _starts_with: filters.month };
-  return getItems("transactions", {
-    filter: Object.keys(queryFilter).length ? queryFilter : undefined,
-    sort: "-date",
-    fields: ["id","type","date","amount","currency.code","category.id","category.name","pay","vendor","desc","notes","tags"]
-  }).then(rows => rows.map(x => normalizeTx({
-    id: x.id,
-    type: x.type,
-    date: String(x.date || "").slice(0,10),
-    amount: Number(x.amount),
-    currency: x.currency?.code || defaults.baseCurrency,
-    category: x.category?.name,
-    pay: x.pay,
-    vendor: x.vendor,
-    desc: x.desc,
-    notes: x.notes,
-    tags: x.tags
-  }, loadConfig())));
+export async function listTransactions(){
+  return loadTransactions(loadConfig());
 }
 
 export async function createTransaction(payload){
-  if(!isDirectus()){
-    const cfg = loadConfig();
-    const tx = loadTransactions(cfg);
-    tx.push(normalizeTx(payload, cfg));
-    saveTransactions(tx);
-    return tx[tx.length - 1];
-  }
-
-  // Idempotencia de import: guardamos/checamos import_id dentro de notes (string)
-  const importIdFromNotes = payload?.notes?.match(/import_id:([^\s]+)/)?.[1];
-  const importIdFromTagsObject = payload?.tags && typeof payload.tags === "object" && !Array.isArray(payload.tags)
-    ? payload.tags.import_id
-    : null;
-  const importIdFromTagsArray = Array.isArray(payload?.tags)
-    ? payload.tags.find(t => String(t).startsWith("import_id:"))?.slice("import_id:".length)
-    : null;
-  const importId = String(importIdFromNotes || importIdFromTagsObject || importIdFromTagsArray || "").trim();
-  if(importId){
-    const existing = await findOneByFilter("transactions", { notes: { _contains: `import_id:${importId}` } });
-    if(existing) return existing;
-  }
-
-  const category = payload.category
-    ? await createCategory({ name: payload.category, type: payload.type || "expense" })
-    : null;
-  const tags = Array.isArray(payload.tags) ? payload.tags : [];
-  const notes = importId
-    ? (String(payload.notes || "").includes(`import_id:${importId}`)
-        ? String(payload.notes || "")
-        : `${String(payload.notes || "").trim()}${payload.notes ? "\n" : ""}import_id:${importId}`.trim())
-    : (payload.notes || "");
-
-  return createItem("transactions", {
-    type: payload.type,
-    date: payload.date,
-    amount: payload.amount,
-    currency: payload.currency,
-    category: category?.id || null,
-    vendor: payload.vendor || "",
-    pay: payload.pay || "",
-    desc: payload.desc || "",
-    notes,
-    tags
-  });
+  const cfg = loadConfig();
+  const tx = loadTransactions(cfg);
+  const normalized = normalizeTx(payload, cfg);
+  tx.push(normalized);
+  saveTransactions(tx);
+  return normalized;
 }
 
 export async function updateTransaction(id, payload){
-  if(!isDirectus()) return { id, ...payload };
-  const category = payload.category
-    ? await createCategory({ name: payload.category, type: payload.type || "expense" })
-    : null;
-  const tags = Array.isArray(payload.tags) ? payload.tags : [];
-  return updateItem("transactions", id, {
-    type: payload.type,
-    date: payload.date,
-    amount: payload.amount,
-    currency: payload.currency,
-    category: category?.id || null,
-    vendor: payload.vendor || "",
-    pay: payload.pay || "",
-    desc: payload.desc || "",
-    notes: payload.notes || "",
-    tags
-  });
+  const cfg = loadConfig();
+  const tx = loadTransactions(cfg);
+  const idx = tx.findIndex(x => x.id === id);
+  if(idx < 0) return null;
+
+  const updated = normalizeTx({ ...tx[idx], ...(payload || {}), id }, cfg);
+  tx[idx] = updated;
+  saveTransactions(tx);
+  return updated;
 }
 
 export async function deleteTransaction(id){
-  if(!isDirectus()) return true;
-  return deleteItem("transactions", id);
+  const cfg = loadConfig();
+  const tx = loadTransactions(cfg).filter(x => x.id !== id);
+  saveTransactions(tx);
+  return true;
 }
 
 export async function listBudgets({ month } = {}){
-  if(!isDirectus()){
-    const map = loadBudgets();
-    const rows = [];
-    Object.entries(map).forEach(([m, data])=>{
-      if(month && m !== month) return;
-      Object.entries(data || {}).forEach(([key, amount])=>{
-        const isGroup = key.startsWith(GROUP_PREFIX);
-        rows.push({ id: `${m}:${key}`, month: m, amount, currency: { code: loadConfig().baseCurrency }, category: { name: isGroup ? `${PAYLOAD_GROUP_PREFIX}${key.replace(GROUP_PREFIX, "")}` : key, type: "expense" } });
+  const map = loadBudgets();
+  const rows = [];
+
+  Object.entries(map).forEach(([m, data]) => {
+    if(month && m !== month) return;
+    Object.entries(data || {}).forEach(([key, amount]) => {
+      const isGroup = key.startsWith(GROUP_PREFIX);
+      rows.push({
+        id: `${m}:${key}`,
+        month: m,
+        amount: Number(amount) || 0,
+        currency: { code: loadConfig().baseCurrency },
+        category: { name: isGroup ? `${PAYLOAD_GROUP_PREFIX}${key.replace(GROUP_PREFIX, "")}` : key, type: "expense" }
       });
     });
-    return rows;
-  }
-
-  return getItems("budgets", {
-    filter: month ? { month: { _eq: month } } : undefined,
-    fields: ["id", "month", "amount", "category.id", "category.name", "category.type", "currency.code"]
   });
+
+  return rows;
 }
 
 export async function upsertBudget({ month, category, amount, currency }){
-  if(!isDirectus()){
-    const map = loadBudgets();
-    if(!map[month]) map[month] = {};
-    map[month][category] = Number(amount) || 0;
-    saveBudgets(map);
-    return { month, category, amount, currency };
-  }
+  const safeMonth = String(month || "").trim();
+  if(!safeMonth) throw new Error("Mes inválido");
+  const safeCategory = String(category || "").trim();
+  if(!safeCategory) throw new Error("Categoría inválida");
 
-  const categoryRow = await createCategory({ name: category, type: "expense" });
-  const found = await findOneByFilter("budgets", { month: { _eq: month }, category: { _eq: categoryRow.id } });
-  const payload = { month, category: categoryRow.id, amount: Number(amount), currency };
-  if(found) return updateItem("budgets", found.id, payload);
-  return createItem("budgets", payload);
+  const map = loadBudgets();
+  if(!map[safeMonth]) map[safeMonth] = {};
+  map[safeMonth][safeCategory] = Number(amount) || 0;
+  saveBudgets(map);
+  return { month: safeMonth, category: safeCategory, amount: Number(amount) || 0, currency };
 }
 
 export async function deleteBudget(id){
-  if(!isDirectus()) return true;
-  return deleteItem("budgets", id);
-}
+  const raw = String(id || "");
+  const sep = raw.indexOf(":");
+  if(sep < 0) return true;
+  const month = raw.slice(0, sep);
+  const category = raw.slice(sep + 1);
 
-export async function pingDirectus(){
-  return ping();
-}
-
-export async function loginDirectus(email, password){
-  return directusLogin(email, password);
-}
-
-export function logoutDirectus(){
-  clearSession();
-}
-
-export function getDirectusSession(){
-  return getSessionStatus();
-}
-
-export async function ensureDirectusSession(){
-  if(!isDirectus()) return { ok: true, connected: true, source: "local" };
-  return ensureAuth();
-}
-
-export async function importLocalDataToDirectus(onProgress){
-  const cfg = loadConfig();
-  const tx = loadTransactions(cfg);
-  const budgets = loadBudgets();
-
-  const groups = cfg.expenseGroups || [];
-  const catsExpense = cfg.expenseCategories || [];
-  const catsIncome = cfg.incomeCategories || [];
-  let done = 0;
-  const budgetsCount = Object.values(budgets).reduce((acc, m)=> acc + Object.keys(m || {}).length, 0);
-  const total = cfg.currencies.length + 1 + groups.length + catsExpense.length + catsIncome.length + budgetsCount + tx.length;
-
-  for(const code of cfg.currencies){
-    await upsertByUnique("currencies", "code", code, { code, symbol: code, decimals: 2, name: code });
-    onProgress?.(++done, total, `Moneda ${code}`);
+  const map = loadBudgets();
+  if(map[month] && Object.prototype.hasOwnProperty.call(map[month], category)){
+    delete map[month][category];
+    if(Object.keys(map[month]).length === 0) delete map[month];
+    saveBudgets(map);
   }
-
-  await saveSettings({ baseCurrency: cfg.baseCurrency, locale: cfg.locale });
-  onProgress?.(++done, total, "Settings");
-
-  for(const g of groups){
-    await createGroup({ name: g, description: "" });
-    onProgress?.(++done, total, `Grupo ${g}`);
-  }
-
-  for(const c of catsExpense){
-    await createCategory({ name: c, type: "expense", group: cfg.expenseCategoryGroups?.[c] });
-    onProgress?.(++done, total, `Categoría ${c}`);
-  }
-
-  for(const c of catsIncome){
-    await createCategory({ name: c, type: "income" });
-    onProgress?.(++done, total, `Categoría ${c}`);
-  }
-
-  for(const [month, data] of Object.entries(budgets)){
-    for(const [category, amount] of Object.entries(data || {})){
-      const targetCategory = category.startsWith(GROUP_PREFIX) ? `${PAYLOAD_GROUP_PREFIX}${category.replace(GROUP_PREFIX, "")}` : category;
-      await upsertBudget({ month, category: targetCategory, amount, currency: cfg.baseCurrency });
-      onProgress?.(++done, total, `Presupuesto ${month}`);
-    }
-  }
-
-  for(const row of tx){
-    const importId = `local-${row.id}`;
-    const notes = String(row.notes || "").includes(`import_id:${importId}`)
-      ? (row.notes || "")
-      : `${String(row.notes || "").trim()}${row.notes ? "\n" : ""}import_id:${importId}`.trim();
-    await createTransaction({ ...row, notes });
-    onProgress?.(++done, total, `Movimiento ${row.id}`);
-  }
-
   return true;
 }
 
 export function syncBudgetMapFromRows(rows){
   return budgetRowsToLocal(rows);
+}
+
+export async function ensureDirectusSession(){
+  return { ok: true, connected: true, source: "local" };
 }
