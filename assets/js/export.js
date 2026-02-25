@@ -1,5 +1,6 @@
 import { el, toast, downloadBlob, toBase } from "./utils.js";
 import { saveTransactions, saveConfig, saveBudgets, getTheme, setTheme } from "./storage.js";
+import { importMonthlyJson } from "./dataStore.js";
 
 export function initExport(state){
   // theme
@@ -54,6 +55,23 @@ export function importJSON(state, ev){
 
       if(parsed.config) state.config = parsed.config;
       if(parsed.budgets && typeof parsed.budgets === "object") state.budgets = parsed.budgets;
+
+      const month = state.tx?.[0]?.date ? String(state.tx[0].date).slice(0, 7) : "";
+      const imported_batch_id = String(parsed.imported_batch_id || `${month}:${state.tx.length}`).trim();
+
+      importMonthlyJson({
+        batchId: imported_batch_id,
+        month,
+        movements: state.tx.map((mov)=> ({
+          date: mov.date,
+          amount: mov.amount,
+          type: mov.type,
+          category: mov.category,
+          group: mov.group || "",
+          note: mov.notes || mov.desc || ""
+        })),
+        source: "json"
+      }).catch(()=> null);
 
       saveTransactions(state.tx);
       saveConfig(state.config);

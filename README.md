@@ -47,3 +47,24 @@ http://localhost:8080
 1. Crear grupo/categoría/movimiento/presupuesto.
 2. Cambiar moneda base y locale.
 3. Recargar página y confirmar persistencia.
+
+## Bootstrap de Directus (idempotente)
+
+Variables de entorno requeridas para correr el bootstrap desde backend/script:
+
+- `DIRECTUS_URL`
+- `DIRECTUS_ADMIN_TOKEN` (recomendado)
+- o bien `DIRECTUS_ADMIN_EMAIL` + `DIRECTUS_ADMIN_PASSWORD`
+
+Ejecución:
+
+```bash
+npm run bootstrap:directus
+```
+
+Notas de seguridad:
+
+- **Nunca** expongas `DIRECTUS_ADMIN_TOKEN` en el frontend.
+- Configurá credenciales admin solo en variables de entorno del server/Coolify o en `.env` local no versionado.
+- El admin funcional de la app debe autenticarse con login normal de Directus y rol `app_admin`.
+
