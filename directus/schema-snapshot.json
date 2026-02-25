@@ -1,0 +1,196 @@
+{
+  "version": 1,
+  "directus": "11.0.0",
+  "vendor": "postgres",
+  "collections": [
+    {
+      "collection": "settings",
+      "meta": {
+        "collection": "settings",
+        "icon": "settings",
+        "note": "Singleton lógico de configuración de la app",
+        "hidden": false,
+        "singleton": false,
+        "translations": null,
+        "archive_field": null,
+        "archive_app_filter": true,
+        "archive_value": null,
+        "unarchive_value": null,
+        "sort_field": null,
+        "accountability": "all",
+        "color": null,
+        "item_duplication_fields": null,
+        "sort": 1,
+        "group": null,
+        "collapse": "open",
+        "preview_url": null,
+        "versioning": false
+      },
+      "schema": { "name": "settings" }
+    },
+    {
+      "collection": "categories",
+      "meta": {
+        "collection": "categories",
+        "icon": "category",
+        "note": "Catálogo de categorías (expense/income)",
+        "hidden": false,
+        "singleton": false,
+        "accountability": "all",
+        "sort": 2,
+        "group": null,
+        "collapse": "open",
+        "versioning": false
+      },
+      "schema": { "name": "categories" }
+    },
+    {
+      "collection": "transactions",
+      "meta": {
+        "collection": "transactions",
+        "icon": "receipt_long",
+        "note": "Movimientos",
+        "hidden": false,
+        "singleton": false,
+        "accountability": "all",
+        "sort": 3,
+        "group": null,
+        "collapse": "open",
+        "versioning": false
+      },
+      "schema": { "name": "transactions" }
+    },
+    {
+      "collection": "budgets",
+      "meta": {
+        "collection": "budgets",
+        "icon": "query_stats",
+        "note": "Presupuestos por mes/categoría",
+        "hidden": false,
+        "singleton": false,
+        "accountability": "all",
+        "sort": 4,
+        "group": null,
+        "collapse": "open",
+        "versioning": false
+      },
+      "schema": { "name": "budgets" }
+    },
+    {
+      "collection": "currencies",
+      "meta": {
+        "collection": "currencies",
+        "icon": "paid",
+        "note": "Monedas",
+        "hidden": false,
+        "singleton": false,
+        "accountability": "all",
+        "sort": 5,
+        "group": null,
+        "collapse": "open",
+        "versioning": false
+      },
+      "schema": { "name": "currencies" }
+    },
+    {
+      "collection": "expense_groups",
+      "meta": {
+        "collection": "expense_groups",
+        "icon": "folder",
+        "note": "Grupos de gasto",
+        "hidden": false,
+        "singleton": false,
+        "accountability": "all",
+        "sort": 6,
+        "group": null,
+        "collapse": "open",
+        "versioning": false
+      },
+      "schema": { "name": "expense_groups" }
+    }
+  ],
+  "fields": [
+    { "collection": "settings", "field": "id", "type": "uuid" },
+    { "collection": "settings", "field": "base_currency", "type": "uuid" },
+    { "collection": "settings", "field": "locale", "type": "string" },
+    { "collection": "settings", "field": "baseCurrency", "type": "string" },
+    { "collection": "settings", "field": "currencies", "type": "json" },
+    { "collection": "settings", "field": "ratesToBase", "type": "json" },
+    { "collection": "settings", "field": "expenseCategories", "type": "json" },
+    { "collection": "settings", "field": "incomeCategories", "type": "json" },
+    { "collection": "settings", "field": "expenseGroups", "type": "json" },
+    { "collection": "settings", "field": "expenseCategoryGroups", "type": "json" },
+
+    { "collection": "categories", "field": "id", "type": "uuid" },
+    { "collection": "categories", "field": "name", "type": "string" },
+    { "collection": "categories", "field": "type", "type": "string" },
+    { "collection": "categories", "field": "group", "type": "uuid" },
+
+    { "collection": "transactions", "field": "id", "type": "uuid" },
+    { "collection": "transactions", "field": "type", "type": "string" },
+    { "collection": "transactions", "field": "date", "type": "date" },
+    { "collection": "transactions", "field": "amount", "type": "decimal" },
+    { "collection": "transactions", "field": "currency", "type": "uuid" },
+    { "collection": "transactions", "field": "category", "type": "uuid" },
+    { "collection": "transactions", "field": "vendor", "type": "string" },
+    { "collection": "transactions", "field": "pay", "type": "string" },
+    { "collection": "transactions", "field": "desc", "type": "string" },
+    { "collection": "transactions", "field": "notes", "type": "text" },
+    { "collection": "transactions", "field": "tags", "type": "json" },
+
+    { "collection": "budgets", "field": "id", "type": "uuid" },
+    { "collection": "budgets", "field": "month", "type": "string" },
+    { "collection": "budgets", "field": "category", "type": "uuid" },
+    { "collection": "budgets", "field": "amount", "type": "decimal" },
+    { "collection": "budgets", "field": "currency", "type": "uuid" },
+
+    { "collection": "currencies", "field": "id", "type": "uuid" },
+    { "collection": "currencies", "field": "code", "type": "string" },
+    { "collection": "currencies", "field": "name", "type": "string" },
+    { "collection": "currencies", "field": "symbol", "type": "string" },
+    { "collection": "currencies", "field": "decimals", "type": "integer" },
+    { "collection": "currencies", "field": "rateToBase", "type": "decimal" },
+
+    { "collection": "expense_groups", "field": "id", "type": "uuid" },
+    { "collection": "expense_groups", "field": "name", "type": "string" },
+    { "collection": "expense_groups", "field": "description", "type": "text" }
+  ],
+  "relations": [
+    {
+      "collection": "settings",
+      "field": "base_currency",
+      "related_collection": "currencies",
+      "schema": { "on_delete": "SET NULL", "on_update": "NO ACTION" }
+    },
+    {
+      "collection": "categories",
+      "field": "group",
+      "related_collection": "expense_groups",
+      "schema": { "on_delete": "SET NULL", "on_update": "NO ACTION" }
+    },
+    {
+      "collection": "transactions",
+      "field": "currency",
+      "related_collection": "currencies",
+      "schema": { "on_delete": "SET NULL", "on_update": "NO ACTION" }
+    },
+    {
+      "collection": "transactions",
+      "field": "category",
+      "related_collection": "categories",
+      "schema": { "on_delete": "SET NULL", "on_update": "NO ACTION" }
+    },
+    {
+      "collection": "budgets",
+      "field": "currency",
+      "related_collection": "currencies",
+      "schema": { "on_delete": "SET NULL", "on_update": "NO ACTION" }
+    },
+    {
+      "collection": "budgets",
+      "field": "category",
+      "related_collection": "categories",
+      "schema": { "on_delete": "CASCADE", "on_update": "NO ACTION" }
+    }
+  ]
+}

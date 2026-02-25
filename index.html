@@ -7,6 +7,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Ingresos y Gastos — Registro & Evaluación</title>
   <meta name="description" content="Registro y evaluación de ingresos y gastos con dashboard, presupuestos, gráficos y exportación." />
+  <meta http-equiv="Cache-Control" content="no-store" />
 
   <link rel="stylesheet" href="./assets/css/styles.css" />
 </head>
@@ -21,7 +22,7 @@
           </svg>
         </div>
         <div>
-          <h1>Ingresos & Gastos <span class="version-badge" id="appVersionBadge">Versión 1.25</span></h1>
+          <h1>Ingresos & Gastos <span class="version-badge" id="appVersionBadge">Versión —</span></h1>
         </div>
       </div>
 
@@ -521,7 +522,14 @@ Finanzas"></textarea>
     })();
   </script>
 
-  <!-- App (ES Modules) -->
-  <script type="module" src="./assets/js/app.js"></script>
+  <!-- App (ES Modules) con cache-bust por build timestamp -->
+  <script>
+    window.__BUILD_TIMESTAMP__ = String(Date.now());
+    window.__APP_VERSION__ = "1.31";
+  </script>
+  <script type="module">
+    const ts = encodeURIComponent(String(window.__BUILD_TIMESTAMP__ || Date.now()));
+    import(`./assets/js/app.js?v=${ts}`);
+  </script>
 </body>
 </html>
