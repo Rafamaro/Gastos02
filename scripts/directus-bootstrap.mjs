@@ -12,6 +12,18 @@ if(!DIRECTUS_URL){
 
 const summary = { collections: [], fields: [], relations: [], roles: [], permissions: [] };
 
+const COLLECTIONS = ["categories", "groups", "movements", "budgets", "settings", "imports_log"];
+const ADMIN_COLLECTIONS = ["categories", "groups", "movements", "budgets", "settings"];
+
+function errorMessage(err){
+  return String(err?.payload?.errors?.[0]?.message || err?.message || "");
+}
+
+function isNotFoundOrMissingCollection(err){
+  const message = errorMessage(err).toLowerCase();
+  return err?.status === 404 || message.includes("does not exist") || message.includes("route /") && message.includes("doesn't exist");
+}
+
 async function http(path, { method = "GET", token, body } = {}){
   const headers = { "Content-Type": "application/json" };
   if(token) headers.Authorization = `Bearer ${token}`;
@@ -26,6 +38,8 @@ async function http(path, { method = "GET", token, body } = {}){
     const err = new Error(message);
     err.status = response.status;
     err.payload = payload;
+    console.error(`❌ HTTP ${response.status} ${method} ${path}`);
+    console.error(JSON.stringify(payload, null, 2));
     throw err;
   }
   return payload;
@@ -49,7 +63,7 @@ async function ensureCollection(token, collection, meta = {}, schema = {}){
     await http(`/collections/${collection}`, { method: "PATCH", token, body: { meta, schema } });
     summary.collections.push(`${collection}:ok`);
   }catch(err){
-    if(err.status !== 404) throw err;
+    if(!isNotFoundOrMissingCollection(err)) throw err;
     await http("/collections", { method: "POST", token, body: { collection, meta, schema } });
     summary.collections.push(`${collection}:created`);
   }
@@ -62,7 +76,7 @@ async function ensureField(token, collection, field, type, extras = {}){
     await http(`/fields/${collection}/${field}`, { method: "PATCH", token, body });
     summary.fields.push(`${collection}.${field}:ok`);
   }catch(err){
-    if(err.status !== 404) throw err;
+    if(!isNotFoundOrMissingCollection(err)) throw err;
     await http(`/fields/${collection}`, { method: "POST", token, body });
     summary.fields.push(`${collection}.${field}:created`);
   }
@@ -128,12 +142,10 @@ async function ensureRelation(token, manyCollection, manyField, oneCollection){
   summary.relations.push(`${manyCollection}.${manyField}:created`);
 }
 
-(async () => {
-  const token = await getAdminToken();
-
+async function ensureSchema(token){
   const commonMeta = { note: "Gastos02", accountability: "all", hidden: false, singleton: false };
   const commonSchema = { name: null };
-  for(const collection of ["categories", "groups", "movements", "budgets", "settings", "imports_log"]){
+  for(const collection of COLLECTIONS){
     await ensureCollection(token, collection, commonMeta, commonSchema);
   }
 
@@ -179,12 +191,26 @@ async function ensureRelation(token, manyCollection, manyField, oneCollection){
   await ensureRelation(token, "movements", "category", "categories");
   await ensureRelation(token, "budgets", "group", "groups");
   await ensureRelation(token, "budgets", "category", "categories");
+}
+
+async function safeReadItems(token, collection){
+  try{
+    return await http(`/items/${collection}?limit=1`, { token });
+  }catch(err){
+    if(!isNotFoundOrMissingCollection(err)) throw err;
+    await ensureSchema(token);
+    return http(`/items/${collection}?limit=1`, { token });
+  }
+}
+
+(async () => {
+  const token = await getAdminToken();
+  await ensureSchema(token);
 
   const appAdminRoleId = await ensureRole(token, "app_admin");
   const appUserRoleId = await ensureRole(token, "app_user");
 
-  const adminCollections = ["categories", "groups", "movements", "budgets", "settings"];
-  for(const collection of adminCollections){
+  for(const collection of ADMIN_COLLECTIONS){
     for(const action of ["create", "read", "update", "delete"]){
       await ensurePermission(token, appAdminRoleId, collection, action, {});
     }
@@ -194,7 +220,7 @@ async function ensureRelation(token, manyCollection, manyField, oneCollection){
   }
 
   const ownFilter = { user_created: { _eq: "$CURRENT_USER" } };
-  for(const collection of adminCollections){
+  for(const collection of ADMIN_COLLECTIONS){
     for(const action of ["create", "read", "update", "delete"]){
       await ensurePermission(token, appUserRoleId, collection, action, ownFilter);
     }
@@ -202,6 +228,9 @@ async function ensureRelation(token, manyCollection, manyField, oneCollection){
   for(const action of ["create", "read"]){
     await ensurePermission(token, appUserRoleId, "imports_log", action, ownFilter);
   }
+
+  await safeReadItems(token, "categories");
+  await safeReadItems(token, "groups");
 
   console.log("\n✅ Bootstrap Directus completado");
   console.log("Colecciones:", summary.collections.join(", "));
