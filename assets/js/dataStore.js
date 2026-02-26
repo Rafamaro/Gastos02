@@ -48,6 +48,23 @@ async function resolveCategoryIdByName(session, categoryName, type = "expense"){
   return list[0]?.id || null;
 }
 
+async function resolveOrCreateCategoryId(session, categoryRef, type = "expense"){
+  const safeType = type === "income" ? "income" : "expense";
+  const ref = String(categoryRef || "").trim();
+  if(isUuid(ref)) return ref;
+  if(!ref) return null;
+
+  const existingId = await resolveCategoryIdByName(session, ref, safeType);
+  if(isUuid(existingId)) return existingId;
+
+  const created = await createItem({
+    ...directusArgs(session),
+    collection: COLLECTIONS.categories,
+    data: { name: ref, type: safeType, is_active: true }
+  });
+  return isUuid(created?.id) ? created.id : null;
+}
+
 export function getBackendMode(){
   return "local";
 }
@@ -313,13 +330,11 @@ export async function createTransaction(payload){
   const session = await getDirectusSession();
   if(session){
     const normalized = normalizeTx(payload, loadConfig());
-    const selectedCategoryId = String(payload?.categoryId || payload?.category || "").trim();
-    const categoryId = isUuid(selectedCategoryId)
-      ? selectedCategoryId
-      : await resolveCategoryIdByName(session, normalized.category, normalized.type);
+    const categoryRef = String(payload?.categoryId || normalized.category || payload?.category || "").trim();
+    const categoryId = await resolveOrCreateCategoryId(session, categoryRef, normalized.type);
 
     if(!isUuid(categoryId)){
-      throw new Error("Categoría inválida: elegí una categoría válida antes de guardar.");
+      throw new Error("No se pudo resolver/crear la categoría en Directus.");
     }
 
     const saved = await createItem({
@@ -350,15 +365,13 @@ export async function updateTransaction(id, payload){
   const session = await getDirectusSession();
   if(session){
     const data = { ...payload };
-    const selectedCategoryId = String(payload?.categoryId || payload?.category || "").trim();
-    if(selectedCategoryId){
-      if(isUuid(selectedCategoryId)) data.category = selectedCategoryId;
-      else {
-        const categoryId = await resolveCategoryIdByName(session, payload.category, payload.type || "expense");
-        if(!isUuid(categoryId)) throw new Error("Categoría inválida: elegí una categoría válida antes de guardar.");
-        data.category = categoryId;
-      }
+    const categoryRef = String(payload?.categoryId || payload?.category || "").trim();
+    if(categoryRef){
+      const categoryId = await resolveOrCreateCategoryId(session, payload?.category || categoryRef, payload?.type || "expense");
+      if(!isUuid(categoryId)) throw new Error("No se pudo resolver/crear la categoría en Directus.");
+      data.category = categoryId;
     }
+    delete data.categoryId;
     if(payload?.notes || payload?.desc) data.note = payload.notes || payload.desc;
     return updateItem({ ...directusArgs(session), collection: COLLECTIONS.movements, id, data });
   }
