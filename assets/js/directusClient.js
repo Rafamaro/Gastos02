@@ -55,7 +55,8 @@ function buildQuery(query = {}){
   const params = new URLSearchParams();
   Object.entries(query || {}).forEach(([key, value]) => {
     if(value === undefined || value === null || value === "") return;
-    if(typeof value === "object") params.set(key, JSON.stringify(value));
+    if(Array.isArray(value)) params.set(key, value.map(v => String(v)).join(","));
+    else if(typeof value === "object") params.set(key, JSON.stringify(value));
     else params.set(key, String(value));
   });
   const encoded = params.toString();
