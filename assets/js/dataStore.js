@@ -15,6 +15,13 @@ const COLLECTIONS = {
   importsLog: "imports_log"
 };
 
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function isUuid(value){
+  return UUID_REGEX.test(String(value || "").trim());
+}
+
+
 async function getDirectusSession(){
   try{
     const session = await ensureDirectusClientSession();
@@ -306,8 +313,15 @@ export async function createTransaction(payload){
   const session = await getDirectusSession();
   if(session){
     const normalized = normalizeTx(payload, loadConfig());
-    const categoryId = await resolveCategoryIdByName(session, normalized.category, normalized.type);
-    if(!categoryId) throw new Error(`No existe categoría '${normalized.category}' (${normalized.type}) en Directus`);
+    const selectedCategoryId = String(payload?.categoryId || payload?.category || "").trim();
+    const categoryId = isUuid(selectedCategoryId)
+      ? selectedCategoryId
+      : await resolveCategoryIdByName(session, normalized.category, normalized.type);
+
+    if(!isUuid(categoryId)){
+      throw new Error("Categoría inválida: elegí una categoría válida antes de guardar.");
+    }
+
     const saved = await createItem({
       ...directusArgs(session),
       collection: COLLECTIONS.movements,
@@ -336,9 +350,14 @@ export async function updateTransaction(id, payload){
   const session = await getDirectusSession();
   if(session){
     const data = { ...payload };
-    if(payload?.category){
-      const categoryId = await resolveCategoryIdByName(session, payload.category, payload.type || "expense");
-      if(categoryId) data.category = categoryId;
+    const selectedCategoryId = String(payload?.categoryId || payload?.category || "").trim();
+    if(selectedCategoryId){
+      if(isUuid(selectedCategoryId)) data.category = selectedCategoryId;
+      else {
+        const categoryId = await resolveCategoryIdByName(session, payload.category, payload.type || "expense");
+        if(!isUuid(categoryId)) throw new Error("Categoría inválida: elegí una categoría válida antes de guardar.");
+        data.category = categoryId;
+      }
     }
     if(payload?.notes || payload?.desc) data.note = payload.notes || payload.desc;
     return updateItem({ ...directusArgs(session), collection: COLLECTIONS.movements, id, data });
@@ -501,7 +520,7 @@ export async function importMonthlyJson({ batchId, month, movements = [], source
     }
   }
 
-  const payload = movements.map(mov => {
+  const mappedPayload = movements.map(mov => {
     const safeType = mov.type === "income" ? "income" : "expense";
     const safeName = String(mov.category || "").trim();
     const category = categoryMap.get(`${safeType}:${safeName}`.toLowerCase());
@@ -515,7 +534,14 @@ export async function importMonthlyJson({ batchId, month, movements = [], source
       source,
       imported_batch_id: safeBatchId
     };
-  }).filter(x => x.category && x.date);
+  });
+
+  const invalidCategoryRow = mappedPayload.find(item => !isUuid(item.category));
+  if(invalidCategoryRow){
+    throw new Error("Importación inválida: se detectaron categorías sin UUID válido.");
+  }
+
+  const payload = mappedPayload.filter(x => x.category && x.date);
 
   const inserted = payload.length ? await createItems({ ...directusArgs(session), collection: COLLECTIONS.movements, data: payload }) : [];
   await createItem({
