@@ -76,17 +76,34 @@ async function ensureCollection(token, payload){
   console.log(`✅ Creada colección: ${collection}`);
 }
 
+async function listFields(token, collection){
+  try{
+    const result = await http(`/fields/${collection}`, { token });
+    const fields = result?.data || result;
+    return Array.isArray(fields) ? fields : [];
+  }catch(err){
+    if(err?.status === 403){
+      console.error(`❌ Sin acceso para listar campos de ${collection}. Verificá políticas con acceso a system/fields.`);
+      console.error(JSON.stringify(err?.payload || {}, null, 2));
+    }
+    throw err;
+  }
+}
+
+async function fieldExists(token, collection, field){
+  const fields = await listFields(token, collection);
+  return fields.some((item) => item?.field === field);
+}
+
 async function ensureField(token, collection, field, type, extras = {}){
   const body = { field, type, ...extras };
-  try{
-    await http(`/fields/${collection}/${field}`, { token });
-    await http(`/fields/${collection}/${field}`, { method: "PATCH", token, body });
+  if(await fieldExists(token, collection, body.field)){
     summary.fields.push(`${collection}.${field}:ok`);
-  }catch(err){
-    if(!isNotFoundOrMissingCollection(err)) throw err;
-    await http(`/fields/${collection}`, { method: "POST", token, body });
-    summary.fields.push(`${collection}.${field}:created`);
+    return;
   }
+  await http(`/fields/${collection}`, { method: "POST", token, body });
+  summary.fields.push(`${collection}.${field}:created`);
+  console.log(`✅ Creado campo: ${collection}.${body.field}`);
 }
 
 async function ensureRole(token, name){
