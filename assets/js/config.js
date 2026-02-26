@@ -201,107 +201,108 @@ function uniqueTrimmed(values = []){
   return [...new Set(values.map(v => String(v || "").trim()).filter(Boolean))];
 }
 
-function makePickerRow(selectedValue = "", options = []){
+const configPickerDraft = {
+  expense: [],
+  income: [],
+  groups: []
+};
+
+function ensureDraftValue(key, fallback = []){
+  if(!Array.isArray(configPickerDraft[key]) || !configPickerDraft[key].length){
+    configPickerDraft[key] = uniqueTrimmed(fallback);
+  }
+  return configPickerDraft[key];
+}
+
+function renderPickerManager({ containerId, valuesKey, values = [] }){
+  const root = el(containerId);
+  if(!root) return;
+
+  const currentValues = ensureDraftValue(valuesKey, values);
+  root.innerHTML = "";
+
   const row = document.createElement("div");
-  row.className = "picker-row";
+  row.className = "picker-manager-row";
 
   const select = document.createElement("select");
-  select.dataset.pickerSelect = "1";
-  const emptyOption = document.createElement("option");
-  emptyOption.value = "";
-  emptyOption.textContent = "Seleccionar...";
-  select.appendChild(emptyOption);
-
-  for(const option of uniqueTrimmed(options)){
-    const item = document.createElement("option");
-    item.value = option;
-    item.textContent = option;
-    if(option === selectedValue) item.selected = true;
-    select.appendChild(item);
+  select.dataset.managerSelect = valuesKey;
+  for(const value of currentValues){
+    const option = document.createElement("option");
+    option.value = value;
+    option.textContent = value;
+    select.appendChild(option);
   }
-
   const addOption = document.createElement("option");
   addOption.value = "__new__";
   addOption.textContent = "➕ Agregar nuevo...";
   select.appendChild(addOption);
-
-  if(selectedValue && !uniqueTrimmed(options).includes(selectedValue)){
-    const custom = document.createElement("option");
-    custom.value = selectedValue;
-    custom.textContent = selectedValue;
-    custom.selected = true;
-    select.insertBefore(custom, addOption);
-  }
 
   select.addEventListener("change", ()=>{
     if(select.value !== "__new__") return;
     const typed = window.prompt("Escribí el nuevo valor");
     const value = String(typed || "").trim();
     if(!value){
-      select.value = "";
+      select.selectedIndex = 0;
       return;
     }
-    const exists = [...select.options].find(o => o.value === value);
-    if(!exists){
-      const custom = document.createElement("option");
-      custom.value = value;
-      custom.textContent = value;
-      select.insertBefore(custom, addOption);
-    }
-    select.value = value;
+    if(!currentValues.includes(value)) currentValues.push(value);
+    configPickerDraft[valuesKey] = uniqueTrimmed(currentValues);
+    renderConfigPickers({ config: {
+      expenseCategories: configPickerDraft.expense,
+      incomeCategories: configPickerDraft.income,
+      expenseGroups: configPickerDraft.groups
+    } });
   });
 
-  const remove = document.createElement("button");
-  remove.type = "button";
-  remove.className = "btn small";
-  remove.textContent = "Quitar";
-  remove.addEventListener("click", ()=> row.remove());
-
-  row.appendChild(select);
-  row.appendChild(remove);
-  return row;
-}
-
-function renderPickerList(containerId, selectedItems = [], options = []){
-  const root = el(containerId);
-  if(!root) return;
-  root.innerHTML = "";
-
-  const list = document.createElement("div");
-  list.className = "picker-list";
-  root.appendChild(list);
-
-  const values = selectedItems.length ? selectedItems : [""];
-  for(const item of values) list.appendChild(makePickerRow(item, options));
-
-  const actions = document.createElement("div");
-  actions.className = "picker-actions";
   const addBtn = document.createElement("button");
   addBtn.type = "button";
   addBtn.className = "btn small";
-  addBtn.textContent = "➕ Agregar fila";
-  addBtn.addEventListener("click", ()=> list.appendChild(makePickerRow("", options)));
-  actions.appendChild(addBtn);
-  root.appendChild(actions);
+  addBtn.textContent = "Agregar seleccionada";
+  addBtn.addEventListener("click", ()=>{
+    if(select.value === "__new__") return;
+    const value = String(select.value || "").trim();
+    if(!value) return;
+    if(!currentValues.includes(value)) currentValues.push(value);
+    configPickerDraft[valuesKey] = uniqueTrimmed(currentValues);
+    renderPickerManager({ containerId, valuesKey, values: currentValues });
+  });
+
+  const removeBtn = document.createElement("button");
+  removeBtn.type = "button";
+  removeBtn.className = "btn small";
+  removeBtn.textContent = "Quitar seleccionada";
+  removeBtn.addEventListener("click", ()=>{
+    if(select.value === "__new__") return;
+    const value = String(select.value || "").trim();
+    configPickerDraft[valuesKey] = currentValues.filter(item => item !== value);
+    renderPickerManager({ containerId, valuesKey, values: configPickerDraft[valuesKey] });
+  });
+
+  row.appendChild(select);
+  row.appendChild(addBtn);
+  row.appendChild(removeBtn);
+  root.appendChild(row);
+
+  const summary = document.createElement("div");
+  summary.className = "hint";
+  summary.textContent = currentValues.length
+    ? `Seleccionadas (${currentValues.length}): ${currentValues.join(", ")}`
+    : "No hay elementos seleccionados.";
+  root.appendChild(summary);
 }
 
-function readPickerValues(containerId){
-  const root = el(containerId);
-  if(!root) return [];
-  const values = [...root.querySelectorAll("select[data-picker-select='1']")].map(sel => sel.value).filter(v => v && v !== "__new__");
-  return uniqueTrimmed(values);
+function readPickerValues(valuesKey){
+  return uniqueTrimmed(configPickerDraft[valuesKey] || []);
 }
 
 function renderConfigPickers(state){
-  const options = {
-    expense: uniqueTrimmed(state.config.expenseCategories || []),
-    income: uniqueTrimmed(state.config.incomeCategories || []),
-    groups: uniqueTrimmed(state.config.expenseGroups || [])
-  };
+  configPickerDraft.expense = uniqueTrimmed(state.config.expenseCategories || configPickerDraft.expense || []);
+  configPickerDraft.income = uniqueTrimmed(state.config.incomeCategories || configPickerDraft.income || []);
+  configPickerDraft.groups = uniqueTrimmed(state.config.expenseGroups || configPickerDraft.groups || []);
 
-  renderPickerList("expenseCategoriesPicker", options.expense, options.expense);
-  renderPickerList("incomeCategoriesPicker", options.income, options.income);
-  renderPickerList("expenseGroupsPicker", options.groups, options.groups);
+  renderPickerManager({ containerId: "expenseCategoriesPicker", valuesKey: "expense", values: configPickerDraft.expense });
+  renderPickerManager({ containerId: "incomeCategoriesPicker", valuesKey: "income", values: configPickerDraft.income });
+  renderPickerManager({ containerId: "expenseGroupsPicker", valuesKey: "groups", values: configPickerDraft.groups });
 }
 
 function renderCategoryGrouping(state){
@@ -314,9 +315,9 @@ function renderCategoryGrouping(state){
 
 export async function saveConfigFromUI(state){
   const config = state.config;
-  const expCats = readPickerValues("expenseCategoriesPicker");
-  const incCats = readPickerValues("incomeCategoriesPicker");
-  const groups = readPickerValues("expenseGroupsPicker");
+  const expCats = readPickerValues("expense");
+  const incCats = readPickerValues("income");
+  const groups = readPickerValues("groups");
   if(expCats.length < 3 || incCats.length < 2) return toast("Revisá categorías mínimas.", "danger");
 
   const rates = { ...config.ratesToBase };
