@@ -51,12 +51,34 @@ function authHeaders(access_token){
   };
 }
 
+function warnInvalidFieldSortParam(key, rawValue){
+  if(!import.meta.env?.DEV) return;
+  if(key !== "fields" && key !== "sort") return;
+  const candidate = String(rawValue || "");
+  if(candidate.includes("[") || candidate.includes("]")){
+    console.warn(`[Directus] Query param "${key}" parece estar serializado como JSON. Usá CSV (ej: ${key}=id,date). Valor recibido:`, rawValue);
+  }
+}
+
 function buildQuery(query = {}){
   const params = new URLSearchParams();
   Object.entries(query || {}).forEach(([key, value]) => {
     if(value === undefined || value === null || value === "") return;
-    if(typeof value === "object") params.set(key, JSON.stringify(value));
-    else params.set(key, String(value));
+
+    if(Array.isArray(value)){
+      const csvValue = value.map(v => String(v)).join(",");
+      warnInvalidFieldSortParam(key, csvValue);
+      params.set(key, csvValue);
+      return;
+    }
+
+    if(typeof value === "object"){
+      params.set(key, JSON.stringify(value));
+      return;
+    }
+
+    warnInvalidFieldSortParam(key, value);
+    params.set(key, String(value));
   });
   const encoded = params.toString();
   return encoded ? `?${encoded}` : "";
