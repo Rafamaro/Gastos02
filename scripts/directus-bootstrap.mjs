@@ -10,10 +10,9 @@ if(!DIRECTUS_URL){
   process.exit(1);
 }
 
-const summary = { collections: [], fields: [], relations: [], roles: [], permissions: [] };
+const summary = { collections: [], fields: [], relations: [], policies: [], roles: [], access: [], permissions: [] };
 
 const COLLECTIONS = ["categories", "groups", "movements", "budgets", "settings", "imports_log"];
-const ADMIN_COLLECTIONS = ["categories", "groups", "movements", "budgets", "settings"];
 
 function errorMessage(err){
   return String(err?.payload?.errors?.[0]?.message || err?.message || "");
@@ -106,6 +105,32 @@ async function ensureField(token, collection, field, type, extras = {}){
   console.log(`✅ Creado campo: ${collection}.${body.field}`);
 }
 
+
+
+async function ensurePolicy(token, name){
+  const found = await http(`/policies?filter[name][_eq]=${encodeURIComponent(name)}&limit=1`, { token });
+  if(found?.data?.[0]?.id){
+    summary.policies.push(`${name}:ok`);
+    return found.data[0].id;
+  }
+
+  const created = await http("/policies", {
+    method: "POST",
+    token,
+    body: {
+      name,
+      admin_access: false,
+      app_access: true,
+      ip_access: null,
+      enforce_tfa: false,
+      description: name === "app_admin" ? "Política administrador funcional de Gastos02" : "Política usuario final Gastos02"
+    }
+  });
+
+  summary.policies.push(`${name}:created`);
+  return created?.data?.id;
+}
+
 async function ensureRole(token, name){
   const found = await http(`/roles?filter[name][_eq]=${encodeURIComponent(name)}&limit=1`, { token });
   if(found?.data?.[0]?.id){
@@ -127,16 +152,35 @@ async function ensureRole(token, name){
   return created?.data?.id;
 }
 
-async function ensurePermission(token, roleId, collection, action, permissions){
-  const found = await http(`/permissions?filter[role][_eq]=${roleId}&filter[collection][_eq]=${collection}&filter[action][_eq]=${action}&limit=1`, { token });
+async function ensureAccessLink(token, roleId, policyId, roleName, policyName){
+  const found = await http(`/access?filter[role][_eq]=${roleId}&filter[policy][_eq]=${policyId}&limit=1`, { token });
+  if(found?.data?.[0]?.id){
+    summary.access.push(`${roleName}->${policyName}:ok`);
+    return found.data[0].id;
+  }
+
+  const created = await http("/access", {
+    method: "POST",
+    token,
+    body: {
+      role: roleId,
+      policy: policyId
+    }
+  });
+  summary.access.push(`${roleName}->${policyName}:created`);
+  return created?.data?.id;
+}
+
+async function ensurePermission(token, policyId, collection, action, fields = "*", permissions = {}, validation = {}, presets = {}){
+  const found = await http(`/permissions?filter[policy][_eq]=${policyId}&filter[collection][_eq]=${collection}&filter[action][_eq]=${action}&limit=1`, { token });
   const body = {
-    role: roleId,
+    policy: policyId,
     collection,
     action,
     permissions: permissions || {},
-    validation: {},
-    presets: {},
-    fields: ["*"]
+    validation: validation || {},
+    presets: presets || {},
+    fields: Array.isArray(fields) ? fields : [fields]
   };
 
   if(found?.data?.[0]?.id){
@@ -231,26 +275,45 @@ async function safeReadItems(token, collection){
   const token = await getAdminToken();
   await ensureSchema(token);
 
+  const appAdminPolicyId = await ensurePolicy(token, "app_admin");
+  const appUserPolicyId = await ensurePolicy(token, "app_user");
   const appAdminRoleId = await ensureRole(token, "app_admin");
   const appUserRoleId = await ensureRole(token, "app_user");
 
-  for(const collection of ADMIN_COLLECTIONS){
+  await ensureAccessLink(token, appAdminRoleId, appAdminPolicyId, "app_admin", "app_admin");
+  await ensureAccessLink(token, appUserRoleId, appUserPolicyId, "app_user", "app_user");
+
+  for(const collection of COLLECTIONS){
     for(const action of ["create", "read", "update", "delete"]){
-      await ensurePermission(token, appAdminRoleId, collection, action, {});
+      await ensurePermission(token, appAdminPolicyId, collection, action);
     }
-  }
-  for(const action of ["create", "read"]){
-    await ensurePermission(token, appAdminRoleId, "imports_log", action, {});
   }
 
   const ownFilter = { user_created: { _eq: "$CURRENT_USER" } };
-  for(const collection of ADMIN_COLLECTIONS){
-    for(const action of ["create", "read", "update", "delete"]){
-      await ensurePermission(token, appUserRoleId, collection, action, ownFilter);
+  const appUserCollections = [...COLLECTIONS];
+  let currentUserSupported = true;
+
+  try{
+    for(const collection of appUserCollections){
+      await ensurePermission(token, appUserPolicyId, collection, "create");
+      await ensurePermission(token, appUserPolicyId, collection, "read", "*", ownFilter);
+      await ensurePermission(token, appUserPolicyId, collection, "update", "*", ownFilter);
+      await ensurePermission(token, appUserPolicyId, collection, "delete", "*", ownFilter);
+    }
+  }catch(err){
+    const message = errorMessage(err).toLowerCase();
+    if(message.includes("$current_user") || message.includes("current_user")){
+      currentUserSupported = false;
+      console.warn("⚠️ $CURRENT_USER no soportado, dejando app_user en modo read-only temporal.");
+    }else{
+      throw err;
     }
   }
-  for(const action of ["create", "read"]){
-    await ensurePermission(token, appUserRoleId, "imports_log", action, ownFilter);
+
+  if(!currentUserSupported){
+    for(const collection of appUserCollections){
+      await ensurePermission(token, appUserPolicyId, collection, "read");
+    }
   }
 
   await safeReadItems(token, "categories");
@@ -260,9 +323,13 @@ async function safeReadItems(token, collection){
   console.log("Colecciones:", summary.collections.join(", "));
   console.log("Campos:", summary.fields.length);
   console.log("Relaciones:", summary.relations.join(", "));
+  console.log("Policies:", summary.policies.join(", "));
   console.log("Roles:", summary.roles.join(", "));
+  console.log("Access:", summary.access.join(", "));
   console.log("Permisos:", summary.permissions.length);
 })().catch(err => {
   console.error("❌ Error en bootstrap:", err.message);
+  if(err?.status) console.error("Status:", err.status);
+  if(err?.payload) console.error(JSON.stringify(err.payload, null, 2));
   process.exit(1);
 });
