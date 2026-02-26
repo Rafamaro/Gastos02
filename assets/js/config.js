@@ -75,7 +75,7 @@ async function fetchDirectusProfile(baseUrl, access_token){
 }
 
 export function initConfig(state){
-  state.bus.on("config:refresh", ()=>{ renderRates(state); renderCategoryGrouping(state); renderBudgetTable(state); renderDirectusCard(state); });
+  state.bus.on("config:refresh", ()=>{ renderConfigPickers(state); renderRates(state); renderCategoryGrouping(state); renderBudgetTable(state); renderDirectusCard(state); });
   state.bus.on("directus:changed", ()=> renderDirectusCard(state));
 
   el("btnSaveConfig")?.addEventListener("click", ()=> saveConfigFromUI(state));
@@ -197,6 +197,113 @@ export function renderRates(state){
   }
 }
 
+function uniqueTrimmed(values = []){
+  return [...new Set(values.map(v => String(v || "").trim()).filter(Boolean))];
+}
+
+function makePickerRow(selectedValue = "", options = []){
+  const row = document.createElement("div");
+  row.className = "picker-row";
+
+  const select = document.createElement("select");
+  select.dataset.pickerSelect = "1";
+  const emptyOption = document.createElement("option");
+  emptyOption.value = "";
+  emptyOption.textContent = "Seleccionar...";
+  select.appendChild(emptyOption);
+
+  for(const option of uniqueTrimmed(options)){
+    const item = document.createElement("option");
+    item.value = option;
+    item.textContent = option;
+    if(option === selectedValue) item.selected = true;
+    select.appendChild(item);
+  }
+
+  const addOption = document.createElement("option");
+  addOption.value = "__new__";
+  addOption.textContent = "➕ Agregar nuevo...";
+  select.appendChild(addOption);
+
+  if(selectedValue && !uniqueTrimmed(options).includes(selectedValue)){
+    const custom = document.createElement("option");
+    custom.value = selectedValue;
+    custom.textContent = selectedValue;
+    custom.selected = true;
+    select.insertBefore(custom, addOption);
+  }
+
+  select.addEventListener("change", ()=>{
+    if(select.value !== "__new__") return;
+    const typed = window.prompt("Escribí el nuevo valor");
+    const value = String(typed || "").trim();
+    if(!value){
+      select.value = "";
+      return;
+    }
+    const exists = [...select.options].find(o => o.value === value);
+    if(!exists){
+      const custom = document.createElement("option");
+      custom.value = value;
+      custom.textContent = value;
+      select.insertBefore(custom, addOption);
+    }
+    select.value = value;
+  });
+
+  const remove = document.createElement("button");
+  remove.type = "button";
+  remove.className = "btn small";
+  remove.textContent = "Quitar";
+  remove.addEventListener("click", ()=> row.remove());
+
+  row.appendChild(select);
+  row.appendChild(remove);
+  return row;
+}
+
+function renderPickerList(containerId, selectedItems = [], options = []){
+  const root = el(containerId);
+  if(!root) return;
+  root.innerHTML = "";
+
+  const list = document.createElement("div");
+  list.className = "picker-list";
+  root.appendChild(list);
+
+  const values = selectedItems.length ? selectedItems : [""];
+  for(const item of values) list.appendChild(makePickerRow(item, options));
+
+  const actions = document.createElement("div");
+  actions.className = "picker-actions";
+  const addBtn = document.createElement("button");
+  addBtn.type = "button";
+  addBtn.className = "btn small";
+  addBtn.textContent = "➕ Agregar fila";
+  addBtn.addEventListener("click", ()=> list.appendChild(makePickerRow("", options)));
+  actions.appendChild(addBtn);
+  root.appendChild(actions);
+}
+
+function readPickerValues(containerId){
+  const root = el(containerId);
+  if(!root) return [];
+  const values = [...root.querySelectorAll("select[data-picker-select='1']")].map(sel => sel.value).filter(v => v && v !== "__new__");
+  return uniqueTrimmed(values);
+}
+
+function renderConfigPickers(state){
+  const options = {
+    expense: uniqueTrimmed(state.config.expenseCategories || []),
+    income: uniqueTrimmed(state.config.incomeCategories || []),
+    groups: uniqueTrimmed(state.config.expenseGroups || [])
+  };
+
+  renderPickerList("expenseCategoriesPicker", options.expense, options.expense);
+  renderPickerList("incomeCategoriesPicker", options.income, options.income);
+  renderPickerList("expenseGroupsPicker", options.groups, options.groups);
+}
+
 function renderCategoryGrouping(state){
   const { expenseGroups = [], expenseCategoryGroups = {}, expenseCategories = [] } = state.config;
   el("tbodyCategoryGrouping").innerHTML = expenseCategories.map(cat => {
@@ -207,9 +314,9 @@ function renderCategoryGrouping(state){
 
 export async function saveConfigFromUI(state){
   const config = state.config;
-  const expCats = el("categoriesExpenseText").value.split("\n").map(s=>s.trim()).filter(Boolean);
-  const incCats = el("categoriesIncomeText").value.split("\n").map(s=>s.trim()).filter(Boolean);
-  const groups = el("expenseGroupsText").value.split("\n").map(s=>s.trim()).filter(Boolean);
+  const expCats = readPickerValues("expenseCategoriesPicker");
+  const incCats = readPickerValues("incomeCategoriesPicker");
+  const groups = readPickerValues("expenseGroupsPicker");
   if(expCats.length < 3 || incCats.length < 2) return toast("Revisá categorías mínimas.", "danger");
 
   const rates = { ...config.ratesToBase };
@@ -235,7 +342,7 @@ export async function saveConfigFromUI(state){
   fillSelect(el("fCurrency"), config.currencies);
   fillSelect(el("eCurrency"), config.currencies);
   fillSelect(el("baseCurrency"), config.currencies);
-  renderRates(state); renderCategoryGrouping(state);
+  renderConfigPickers(state); renderRates(state); renderCategoryGrouping(state);
   toast("Config guardada ✅");
   state.bus.emit("config:changed"); state.bus.emit("dashboard:refresh"); state.bus.emit("ingreso:refresh"); state.bus.emit("config:refresh");
 }

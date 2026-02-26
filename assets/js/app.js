@@ -61,9 +61,6 @@ async function init(){
 
   el("numLocale").value = state.config.locale;
   el("baseCurrency").value = state.config.baseCurrency;
-  el("categoriesExpenseText").value = state.config.expenseCategories.join("\n");
-  el("categoriesIncomeText").value = state.config.incomeCategories.join("\n");
-  el("expenseGroupsText").value = (state.config.expenseGroups || []).join("\n");
 
   initTabs(state);
   initIngreso(state);
