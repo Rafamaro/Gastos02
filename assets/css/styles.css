@@ -208,6 +208,11 @@
     .btn.small{padding: 8px 10px; border-radius: 10px; font-size: 12px}
     .btn:disabled{opacity:.55; cursor:not-allowed; transform:none}
 
+    .picker-list{display:grid; gap:8px}
+    .picker-row{display:flex; gap:8px; align-items:center}
+    .picker-row select{flex:1}
+    .picker-actions{margin-top:8px}
+
     .pill{
       display:inline-flex;
       align-items:center;
