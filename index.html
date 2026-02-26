@@ -308,14 +308,14 @@
 
         <div class="row" style="margin-top:10px">
           <div>
-            <label>Categorías de gastos (una por línea)</label>
-            <textarea id="categoriesExpenseText"></textarea>
-            <div class="hint">Ej: Salud, Transporte, Comida…</div>
+            <label>Categorías de gastos</label>
+            <div id="expenseCategoriesPicker"></div>
+            <div class="hint">Usá el desplegable para elegir, “➕ Agregar nuevo...” para crear y “Quitar seleccionada” para eliminar.</div>
           </div>
           <div>
-            <label>Categorías de ingresos (una por línea)</label>
-            <textarea id="categoriesIncomeText"></textarea>
-            <div class="hint">Ej: Salario, Honorarios, Reembolso…</div>
+            <label>Categorías de ingresos</label>
+            <div id="incomeCategoriesPicker"></div>
+            <div class="hint">Usá el desplegable para elegir, “➕ Agregar nuevo...” para crear y “Quitar seleccionada” para eliminar.</div>
           </div>
         </div>
 
@@ -324,11 +324,9 @@
           <div class="hint">Creá grupos grandes (ej: Esenciales, Trabajo) y asigná cada categoría para ver estadísticas agrupadas en el dashboard.</div>
 
           <div style="margin-top:10px">
-            <label>Grupos disponibles (uno por línea)</label>
-            <textarea id="expenseGroupsText" placeholder="Ej:
-Esenciales
-Trabajo
-Finanzas"></textarea>
+            <label>Grupos disponibles</label>
+            <div id="expenseGroupsPicker"></div>
+            <div class="hint">Podés agregar o quitar el grupo actualmente seleccionado desde los botones.</div>
           </div>
 
           <div style="margin-top:12px; max-height: 320px; overflow:auto; border-radius: 14px;">

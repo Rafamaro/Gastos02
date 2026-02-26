@@ -75,7 +75,7 @@ async function fetchDirectusProfile(baseUrl, access_token){
 }
 
 export function initConfig(state){
-  state.bus.on("config:refresh", ()=>{ renderRates(state); renderCategoryGrouping(state); renderBudgetTable(state); renderDirectusCard(state); });
+  state.bus.on("config:refresh", ()=>{ renderConfigPickers(state); renderRates(state); renderCategoryGrouping(state); renderBudgetTable(state); renderDirectusCard(state); });
   state.bus.on("directus:changed", ()=> renderDirectusCard(state));
 
   el("btnSaveConfig")?.addEventListener("click", ()=> saveConfigFromUI(state));
@@ -197,6 +197,114 @@ export function renderRates(state){
   }
 }
 
+function uniqueTrimmed(values = []){
+  return [...new Set(values.map(v => String(v || "").trim()).filter(Boolean))];
+}
+
+const configPickerDraft = {
+  expense: [],
+  income: [],
+  groups: []
+};
+
+function ensureDraftValue(key, fallback = []){
+  if(!Array.isArray(configPickerDraft[key]) || !configPickerDraft[key].length){
+    configPickerDraft[key] = uniqueTrimmed(fallback);
+  }
+  return configPickerDraft[key];
+}
+
+function renderPickerManager({ containerId, valuesKey, values = [] }){
+  const root = el(containerId);
+  if(!root) return;
+
+  const currentValues = ensureDraftValue(valuesKey, values);
+  root.innerHTML = "";
+
+  const row = document.createElement("div");
+  row.className = "picker-manager-row";
+
+  const select = document.createElement("select");
+  select.dataset.managerSelect = valuesKey;
+  for(const value of currentValues){
+    const option = document.createElement("option");
+    option.value = value;
+    option.textContent = value;
+    select.appendChild(option);
+  }
+  const addOption = document.createElement("option");
+  addOption.value = "__new__";
+  addOption.textContent = "➕ Agregar nuevo...";
+  select.appendChild(addOption);
+
+  select.addEventListener("change", ()=>{
+    if(select.value !== "__new__") return;
+    const typed = window.prompt("Escribí el nuevo valor");
+    const value = String(typed || "").trim();
+    if(!value){
+      select.selectedIndex = 0;
+      return;
+    }
+    if(!currentValues.includes(value)) currentValues.push(value);
+    configPickerDraft[valuesKey] = uniqueTrimmed(currentValues);
+    renderConfigPickers({ config: {
+      expenseCategories: configPickerDraft.expense,
+      incomeCategories: configPickerDraft.income,
+      expenseGroups: configPickerDraft.groups
+    } });
+  });
+
+  const addBtn = document.createElement("button");
+  addBtn.type = "button";
+  addBtn.className = "btn small";
+  addBtn.textContent = "Agregar seleccionada";
+  addBtn.addEventListener("click", ()=>{
+    if(select.value === "__new__") return;
+    const value = String(select.value || "").trim();
+    if(!value) return;
+    if(!currentValues.includes(value)) currentValues.push(value);
+    configPickerDraft[valuesKey] = uniqueTrimmed(currentValues);
+    renderPickerManager({ containerId, valuesKey, values: currentValues });
+  });
+
+  const removeBtn = document.createElement("button");
+  removeBtn.type = "button";
+  removeBtn.className = "btn small";
+  removeBtn.textContent = "Quitar seleccionada";
+  removeBtn.addEventListener("click", ()=>{
+    if(select.value === "__new__") return;
+    const value = String(select.value || "").trim();
+    configPickerDraft[valuesKey] = currentValues.filter(item => item !== value);
+    renderPickerManager({ containerId, valuesKey, values: configPickerDraft[valuesKey] });
+  });
+
+  row.appendChild(select);
+  row.appendChild(addBtn);
+  row.appendChild(removeBtn);
+  root.appendChild(row);
+
+  const summary = document.createElement("div");
+  summary.className = "hint";
+  summary.textContent = currentValues.length
+    ? `Seleccionadas (${currentValues.length}): ${currentValues.join(", ")}`
+    : "No hay elementos seleccionados.";
+  root.appendChild(summary);
+}
+
+function readPickerValues(valuesKey){
+  return uniqueTrimmed(configPickerDraft[valuesKey] || []);
+}
+
+function renderConfigPickers(state){
+  configPickerDraft.expense = uniqueTrimmed(state.config.expenseCategories || configPickerDraft.expense || []);
+  configPickerDraft.income = uniqueTrimmed(state.config.incomeCategories || configPickerDraft.income || []);
+  configPickerDraft.groups = uniqueTrimmed(state.config.expenseGroups || configPickerDraft.groups || []);
+
+  renderPickerManager({ containerId: "expenseCategoriesPicker", valuesKey: "expense", values: configPickerDraft.expense });
+  renderPickerManager({ containerId: "incomeCategoriesPicker", valuesKey: "income", values: configPickerDraft.income });
+  renderPickerManager({ containerId: "expenseGroupsPicker", valuesKey: "groups", values: configPickerDraft.groups });
+}
+
 function renderCategoryGrouping(state){
   const { expenseGroups = [], expenseCategoryGroups = {}, expenseCategories = [] } = state.config;
   el("tbodyCategoryGrouping").innerHTML = expenseCategories.map(cat => {
@@ -207,9 +315,9 @@ function renderCategoryGrouping(state){
 
 export async function saveConfigFromUI(state){
   const config = state.config;
-  const expCats = el("categoriesExpenseText").value.split("\n").map(s=>s.trim()).filter(Boolean);
-  const incCats = el("categoriesIncomeText").value.split("\n").map(s=>s.trim()).filter(Boolean);
-  const groups = el("expenseGroupsText").value.split("\n").map(s=>s.trim()).filter(Boolean);
+  const expCats = readPickerValues("expense");
+  const incCats = readPickerValues("income");
+  const groups = readPickerValues("groups");
   if(expCats.length < 3 || incCats.length < 2) return toast("Revisá categorías mínimas.", "danger");
 
   const rates = { ...config.ratesToBase };
@@ -235,7 +343,7 @@ export async function saveConfigFromUI(state){
   fillSelect(el("fCurrency"), config.currencies);
   fillSelect(el("eCurrency"), config.currencies);
   fillSelect(el("baseCurrency"), config.currencies);
-  renderRates(state); renderCategoryGrouping(state);
+  renderConfigPickers(state); renderRates(state); renderCategoryGrouping(state);
   toast("Config guardada ✅");
   state.bus.emit("config:changed"); state.bus.emit("dashboard:refresh"); state.bus.emit("ingreso:refresh"); state.bus.emit("config:refresh");
 }
