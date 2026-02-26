@@ -57,16 +57,23 @@ async function getAdminToken(){
   return payload?.data?.access_token;
 }
 
-async function ensureCollection(token, collection, meta = {}, schema = {}){
-  try{
-    await http(`/collections/${collection}`, { token });
-    await http(`/collections/${collection}`, { method: "PATCH", token, body: { meta, schema } });
+async function collectionExists(token, collection){
+  const res = await http("/collections", { token });
+  const list = res?.data || res;
+  return Array.isArray(list) && list.some((c) => c.collection === collection);
+}
+
+async function ensureCollection(token, payload){
+  const collection = payload.collection;
+  const exists = await collectionExists(token, collection);
+  if(exists){
     summary.collections.push(`${collection}:ok`);
-  }catch(err){
-    if(!isNotFoundOrMissingCollection(err)) throw err;
-    await http("/collections", { method: "POST", token, body: { collection, meta, schema } });
-    summary.collections.push(`${collection}:created`);
+    return;
   }
+
+  await http("/collections", { method: "POST", token, body: payload });
+  summary.collections.push(`${collection}:created`);
+  console.log(`✅ Creada colección: ${collection}`);
 }
 
 async function ensureField(token, collection, field, type, extras = {}){
@@ -146,7 +153,7 @@ async function ensureSchema(token){
   const commonMeta = { note: "Gastos02", accountability: "all", hidden: false, singleton: false };
   const commonSchema = { name: null };
   for(const collection of COLLECTIONS){
-    await ensureCollection(token, collection, commonMeta, commonSchema);
+    await ensureCollection(token, { collection, meta: commonMeta, schema: commonSchema });
   }
 
   await ensureField(token, "categories", "name", "string", { schema: { is_nullable: false }, meta: { required: true } });
