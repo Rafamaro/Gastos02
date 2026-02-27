@@ -50,6 +50,7 @@ async function requestJson(url, options = {}, fallbackMessage = "No se pudo comp
   }
 
   if(!response.ok){
+    const method = String(options?.method || "GET").toUpperCase();
     const msg = extractErrorMessage(payload) || `${fallbackMessage} (HTTP ${response.status})`;
     console.error("[Directus] Request failed", {
       status: response.status,
