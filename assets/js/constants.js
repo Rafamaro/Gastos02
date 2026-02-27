@@ -22,7 +22,7 @@ export const defaults = {
     "Ocio", "Impuestos", "Ropa", "Trabajo", "Otros"
   ],
   incomeCategories: [
-    "Salario", "Honorarios", "Reembolso", "Inversiones", "Ventas", "Otros ingresos"
+    "Salario", "Honorarios", "Reembolso", "Reintegro", "Inversiones", "Ventas", "Otros ingresos"
   ],
   expenseGroups: ["Esenciales", "Finanzas", "Estilo de vida", "Trabajo"],
   expenseCategoryGroups: {},

@@ -160,7 +160,7 @@ export function syncLabelsByType(state){
   el("labPay").textContent = t==="income" ? "Fuente / Medio" : "Medio de pago";
   el("labCategory").textContent = "Categoría";
   el("hintType").textContent = t==="income"
-    ? "Ingreso: suma al neto."
+    ? "Ingreso: suma al neto. Si la fuente es Reintegro, no suma al KPI de ingresos."
     : "Gasto: resta al neto (y aplica presupuesto si lo definiste).";
   updateAmountHint(state);
 }

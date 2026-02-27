@@ -57,7 +57,7 @@ async function init(){
   fillSelect(el("eCurrency"), state.config.currencies);
   fillSelect(el("baseCurrency"), state.config.currencies);
 
-  fillSelect(el("ePay"), ["Tarjeta","Débito","Efectivo","Transferencia","Reingreso por transferencia","Cripto","Otro"]);
+  fillSelect(el("ePay"), ["Tarjeta","Débito","Efectivo","Transferencia","Reintegro","Reingreso por transferencia","Cripto","Otro"]);
 
   el("numLocale").value = state.config.locale;
   el("baseCurrency").value = state.config.baseCurrency;
