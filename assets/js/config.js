@@ -204,6 +204,7 @@ function uniqueTrimmed(values = []){
 const configPickerDraft = {
   expense: [],
   income: [],
+  reentry: [],
   groups: []
 };
 
@@ -250,6 +251,7 @@ function renderPickerManager({ containerId, valuesKey, values = [] }){
     renderConfigPickers({ config: {
       expenseCategories: configPickerDraft.expense,
       incomeCategories: configPickerDraft.income,
+      reentryCategories: configPickerDraft.reentry,
       expenseGroups: configPickerDraft.groups
     } });
   });
@@ -298,10 +300,12 @@ function readPickerValues(valuesKey){
 function renderConfigPickers(state){
   configPickerDraft.expense = uniqueTrimmed(state.config.expenseCategories || configPickerDraft.expense || []);
   configPickerDraft.income = uniqueTrimmed(state.config.incomeCategories || configPickerDraft.income || []);
+  configPickerDraft.reentry = uniqueTrimmed(state.config.reentryCategories || configPickerDraft.reentry || []);
   configPickerDraft.groups = uniqueTrimmed(state.config.expenseGroups || configPickerDraft.groups || []);
 
   renderPickerManager({ containerId: "expenseCategoriesPicker", valuesKey: "expense", values: configPickerDraft.expense });
   renderPickerManager({ containerId: "incomeCategoriesPicker", valuesKey: "income", values: configPickerDraft.income });
+  renderPickerManager({ containerId: "reentryCategoriesPicker", valuesKey: "reentry", values: configPickerDraft.reentry });
   renderPickerManager({ containerId: "expenseGroupsPicker", valuesKey: "groups", values: configPickerDraft.groups });
 }
 
@@ -317,8 +321,9 @@ export async function saveConfigFromUI(state){
   const config = state.config;
   const expCats = readPickerValues("expense");
   const incCats = readPickerValues("income");
+  const reentryCats = readPickerValues("reentry");
   const groups = readPickerValues("groups");
-  if(expCats.length < 3 || incCats.length < 2) return toast("Revisá categorías mínimas.", "danger");
+  if(expCats.length < 3 || incCats.length < 2 || reentryCats.length < 1) return toast("Revisá categorías mínimas.", "danger");
 
   const rates = { ...config.ratesToBase };
   document.querySelectorAll("#ratesBox input[data-cur]").forEach(inp=>{ rates[inp.dataset.cur] = Number(inp.value) || 1; });
@@ -330,6 +335,7 @@ export async function saveConfigFromUI(state){
     baseCurrency: el("baseCurrency").value,
     expenseCategories: expCats,
     incomeCategories: incCats,
+    reentryCategories: reentryCats,
     expenseGroups: groups,
     expenseCategoryGroups: categoryGroups,
     ratesToBase: rates
@@ -339,6 +345,7 @@ export async function saveConfigFromUI(state){
   for(const g of groups) await createGroup({ name: g, description: "" });
   for(const c of expCats) await createCategory({ name: c, type: "expense", group: categoryGroups[c] });
   for(const c of incCats) await createCategory({ name: c, type: "income" });
+  for(const c of reentryCats) await createCategory({ name: c, type: "income" });
 
   fillSelect(el("fCurrency"), config.currencies);
   fillSelect(el("eCurrency"), config.currencies);

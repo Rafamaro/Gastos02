@@ -82,7 +82,7 @@ export function currentFormType(){
 }
 
 function unionCategories(config){
-  const set = new Set([...(config.expenseCategories||[]), ...(config.incomeCategories||[])]);
+  const set = new Set([...(config.expenseCategories||[]), ...(config.incomeCategories||[]), ...(config.reentryCategories||[])]);
   return [...set];
 }
 
@@ -98,7 +98,11 @@ function setSelectOptions(select, options = []){
 
 async function loadCategoryOptions(state, type){
   const config = state.config;
-  const configuredNames = type === "income" ? (config.incomeCategories || []) : (config.expenseCategories || []);
+  const configuredNames = type === "income"
+    ? (config.incomeCategories || [])
+    : type === "reentry"
+      ? (config.reentryCategories || ["Reintegro"])
+      : (config.expenseCategories || []);
 
   if(state.directus?.connected){
     const rows = await listCategories({ type });
@@ -115,6 +119,7 @@ async function loadCategoryOptions(state, type){
     }).filter(opt => opt.label);
 
     for(const row of rows || []){
+      if(type === "reentry") continue;
       const cleanName = String(row?.name || "").trim();
       if(!cleanName) continue;
       if(options.some(opt => opt.label.toLowerCase() === cleanName.toLowerCase())) continue;
@@ -156,13 +161,17 @@ export async function refreshCategorySelects(state){
 
 export function syncLabelsByType(state){
   const t = currentFormType();
-  el("labVendor").textContent = t==="income" ? "Origen" : "Comercio / Lugar";
-  el("labPay").textContent = t==="income" ? "Fuente / Medio" : "Medio de pago";
+  el("labVendor").textContent = (t==="income" || t==="reentry") ? "Origen" : "Comercio / Lugar";
+  el("labPay").textContent = (t==="income" || t==="reentry") ? "Fuente / Medio" : "Medio de pago";
   el("labCategory").textContent = "Categoría";
   el("hintType").textContent = t==="income"
-    ? "Ingreso: suma al neto. Si la fuente es Reintegro, no suma al KPI de ingresos."
-    : "Gasto: resta al neto (y aplica presupuesto si lo definiste).";
+    ? "Ingreso: suma al neto y al KPI de ingresos."
+    : t==="reentry"
+      ? "Reintegro: suma al neto, pero no al KPI de ingresos."
+      : "Gasto: resta al neto (y aplica presupuesto si lo definiste).";
   updateAmountHint(state);
+
+  if(t === "reentry" && el("fPay").value !== "Reintegro") el("fPay").value = "Reintegro";
 }
 
 export function updateAmountHint(state){
@@ -203,15 +212,18 @@ export async function addTx(state){
 
   const t = currentFormType();
   const selectedCategoryId = el("fCategory").value;
+  const effectiveType = t === "reentry" ? "income" : t;
+  const effectivePay = t === "reentry" ? "Reintegro" : el("fPay").value;
   const selectedCategoryName = el("fCategory").selectedOptions?.[0]?.textContent || selectedCategoryId;
   const x = normalizeTx({
-    type: t,
+    type: effectiveType,
+    uiType: t,
     date: el("fDate").value || todayISO(),
     amount,
     currency: el("fCurrency").value,
     category: selectedCategoryName,
     categoryId: selectedCategoryId,
-    pay: el("fPay").value,
+    pay: effectivePay,
     vendor: el("fVendor").value.trim(),
     desc: el("fDesc").value.trim(),
     tags: safeTags(el("fTags").value),
@@ -241,7 +253,10 @@ export function getFiltered(state){
 
   let list = state.tx.map(x => normalizeTx(x, config));
 
-  if(type && type !== "(Todos)") list = list.filter(x => x.type === type);
+  if(type && type !== "(Todos)"){
+    if(type === "reentry") list = list.filter(x => String(x.pay||"").trim().toLowerCase() === "reintegro");
+    else list = list.filter(x => x.type === type && String(x.pay||"").trim().toLowerCase() !== "reintegro");
+  }
   if(cat && cat !== "(Todas)") list = list.filter(x => x.category === cat);
   if(from) list = list.filter(x => x.date >= from);
   if(to) list = list.filter(x => x.date <= to);
@@ -289,8 +304,13 @@ export function renderList(state){
 function rowHTML(x, config){
   const tags = (x.tags||[]).slice(0,6).map(t=>`<span class="tag">#${escapeHTML(t)}</span>`).join("");
   const base = toBase(x.amount, x.currency, config);
-  const sign = x.type==="income" ? "+" : "−";
-  const badge = x.type==="income" ? `<span class="badge income">Ingreso</span>` : `<span class="badge expense">Gasto</span>`;
+  const isReentry = x.type==="income" && String(x.pay||"").trim().toLowerCase()==="reintegro";
+  const sign = x.type==="expense" ? "−" : "+";
+  const badge = isReentry
+    ? `<span class="badge income">Reintegro</span>`
+    : x.type==="income"
+      ? `<span class="badge income">Ingreso</span>`
+      : `<span class="badge expense">Gasto</span>`;
 
   const moneyRaw = x.currency === config.baseCurrency
     ? fmtMoney(x.amount, x.currency, config)
@@ -325,7 +345,7 @@ export async function openEdit(state, txId){
   if(!x){ toast("No se encontró.", "danger"); return; }
 
   el("eId").value = x.id;
-  el("eType").value = x.type;
+  el("eType").value = (x.type === "income" && String(x.pay||"").trim().toLowerCase()==="reintegro") ? "reentry" : x.type;
   await refreshCategorySelects(state);
 
   el("eDate").value = x.date;
@@ -336,7 +356,7 @@ export async function openEdit(state, txId){
   const eCategory = el("eCategory");
   const byName = Array.from(eCategory.options).find(opt => opt.textContent === x.category);
   eCategory.value = byName?.value || x.category;
-  el("ePay").value = x.pay;
+  el("ePay").value = (x.type === "income" && String(x.pay||"").trim().toLowerCase()==="reintegro") ? "Reintegro" : x.pay;
 
   el("eVendor").value = x.vendor;
   el("eDesc").value = x.desc;
@@ -359,16 +379,21 @@ export async function saveEdit(state){
   }
 
   const selectedEditCategoryId = el("eCategory").value;
+  const editType = el("eType").value;
+  const effectiveEditType = editType === "reentry" ? "income" : editType;
+  const effectiveEditPay = editType === "reentry" ? "Reintegro" : el("ePay").value;
+  if(editType === "reentry") el("ePay").value = "Reintegro";
   const selectedEditCategoryName = el("eCategory").selectedOptions?.[0]?.textContent || selectedEditCategoryId;
   const updated = normalizeTx({
     id: idv,
-    type: el("eType").value,
+    type: effectiveEditType,
+    uiType: editType,
     date: el("eDate").value || todayISO(),
     amount,
     currency: el("eCurrency").value,
     category: selectedEditCategoryName,
     categoryId: selectedEditCategoryId,
-    pay: el("ePay").value,
+    pay: effectiveEditPay,
     vendor: el("eVendor").value.trim(),
     desc: el("eDesc").value.trim(),
     tags: safeTags(el("eTags").value),

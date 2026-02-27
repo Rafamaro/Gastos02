@@ -24,6 +24,9 @@ export const defaults = {
   incomeCategories: [
     "Salario", "Honorarios", "Reembolso", "Reintegro", "Inversiones", "Ventas", "Otros ingresos"
   ],
+  reentryCategories: [
+    "Reintegro", "Devoluciones", "Reembolso de gasto"
+  ],
   expenseGroups: ["Esenciales", "Finanzas", "Estilo de vida", "Trabajo"],
   expenseCategoryGroups: {},
   ratesToBase: { "ARS": 1, "USD": 1050, "EUR": 1150 } // ejemplo

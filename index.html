@@ -56,6 +56,7 @@
             <div class="seg" role="radiogroup" aria-label="Tipo de movimiento">
               <label><input type="radio" name="fType" value="expense" checked /> Gasto</label>
               <label><input type="radio" name="fType" value="income" /> Ingreso</label>
+              <label><input type="radio" name="fType" value="reentry" /> Reintegro</label>
             </div>
             <div class="hint" id="hintType">Los presupuestos se aplican a gastos.</div>
           </div>
@@ -149,6 +150,7 @@
               <option value="(Todos)">(Todos)</option>
               <option value="expense">Gastos</option>
               <option value="income">Ingresos</option>
+              <option value="reentry">Reintegros</option>
             </select>
           </div>
           <div>
@@ -215,6 +217,7 @@
             <select id="dashCatsMode">
               <option value="expense">Gastos</option>
               <option value="income">Ingresos</option>
+              <option value="reentry">Reintegros</option>
             </select>
           </div>
           <div>
@@ -317,6 +320,14 @@
             <label>Categorías de ingresos</label>
             <div id="incomeCategoriesPicker"></div>
             <div class="hint">Usá el desplegable para elegir, “➕ Agregar nuevo...” para crear y “Quitar seleccionada” para eliminar.</div>
+          </div>
+        </div>
+
+        <div class="row" style="margin-top:10px">
+          <div>
+            <label>Categorías de reintegros</label>
+            <div id="reentryCategoriesPicker"></div>
+            <div class="hint">Categorías específicas para reintegros. Suman al neto, pero no al KPI de ingresos.</div>
           </div>
         </div>
 
@@ -445,6 +456,7 @@
             <select id="eType">
               <option value="expense">Gasto</option>
               <option value="income">Ingreso</option>
+              <option value="reentry">Reintegro</option>
             </select>
           </div>
           <div>

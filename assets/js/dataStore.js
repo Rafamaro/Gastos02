@@ -121,6 +121,7 @@ export async function saveSettings(payload){
   const merged = mergeConfig({ ...loadConfig(), ...(payload || {}) });
   merged.expenseCategories = unique(merged.expenseCategories);
   merged.incomeCategories = unique(merged.incomeCategories);
+  merged.reentryCategories = unique(merged.reentryCategories);
   merged.expenseGroups = unique(merged.expenseGroups);
   const session = await getDirectusSession();
   if(session){
@@ -201,7 +202,10 @@ export async function listCategories({ type } = {}){
   const session = await getDirectusSession();
   if(session){
     const query = { fields: ["id", "name", "type", "group", "group.id", "group.name", "sort", "color", "icon", "is_active"], sort: ["sort", "name"], limit: 1000 };
-    if(type) query.filter = { type: { _eq: type } };
+    if(type){
+      const safeType = type === "reentry" ? "income" : type;
+      query.filter = { type: { _eq: safeType } };
+    }
     return listItems({ ...directusArgs(session), collection: COLLECTIONS.categories, query });
   }
   const cfg = loadConfig();
@@ -212,8 +216,10 @@ export async function listCategories({ type } = {}){
       type: "expense",
       group: cfg.expenseCategoryGroups?.[name] ? { name: cfg.expenseCategoryGroups[name], type: "group" } : null
     })),
-    ...(cfg.incomeCategories || []).map(name => ({ id: `income:${name}`, name, type: "income", group: null }))
+    ...(cfg.incomeCategories || []).map(name => ({ id: `income:${name}`, name, type: "income", group: null })),
+    ...(cfg.reentryCategories || []).map(name => ({ id: `reentry:${name}`, name, type: "reentry", group: null }))
   ];
+  if(type === "reentry") return local.filter(x => x.type === "reentry");
   return type ? local.filter(x => x.type === type) : local;
 }
 
@@ -321,7 +327,7 @@ export async function listTransactions(){
       id: row.id,
       date: row.date,
       amount: Number(row.amount) || 0,
-      type: row.type,
+      type: row.type === "income" && String(row.source || "").trim().toLowerCase() === "reintegro" ? "reentry" : row.type,
       category: row.category?.name || "",
       desc: row.note || "",
       notes: row.note || "",
@@ -521,7 +527,7 @@ export async function importMonthlyJson({ batchId, month, movements = [], source
 
   const mappedPayload = [];
   for(const mov of movements){
-    const safeType = mov.type === "income" ? "income" : "expense";
+    const safeType = mov.type === "income" || mov.type === "reentry" ? "income" : "expense";
     const categoryRef = String(mov.category || "").trim();
     if(!categoryRef) continue;
     const categoryId = await resolveOrCreateCategoryId(session, categoryRef, safeType);
