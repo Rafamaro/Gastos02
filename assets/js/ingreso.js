@@ -97,15 +97,34 @@ function setSelectOptions(select, options = []){
 }
 
 async function loadCategoryOptions(state, type){
+  const config = state.config;
+  const configuredNames = type === "income" ? (config.incomeCategories || []) : (config.expenseCategories || []);
+
   if(state.directus?.connected){
     const rows = await listCategories({ type });
-    return rows
-      .filter(row => row?.id && row?.name)
-      .map(row => ({ value: row.id, label: row.name }));
+    const byName = new Map(
+      rows
+        .filter(row => row?.id && row?.name)
+        .map(row => [String(row.name).trim().toLowerCase(), row])
+    );
+
+    const options = configuredNames.map(name => {
+      const cleanName = String(name || "").trim();
+      const matched = byName.get(cleanName.toLowerCase());
+      return { value: matched?.id || cleanName, label: cleanName };
+    }).filter(opt => opt.label);
+
+    for(const row of rows || []){
+      const cleanName = String(row?.name || "").trim();
+      if(!cleanName) continue;
+      if(options.some(opt => opt.label.toLowerCase() === cleanName.toLowerCase())) continue;
+      options.push({ value: row.id, label: cleanName });
+    }
+
+    if(options.length) return options;
   }
-  const config = state.config;
-  const names = type === "income" ? config.incomeCategories : config.expenseCategories;
-  const fallback = names.length ? names : ["Otros"];
+
+  const fallback = configuredNames.length ? configuredNames : ["Otros"];
   return fallback.map(name => ({ value: name, label: name }));
 }
 
