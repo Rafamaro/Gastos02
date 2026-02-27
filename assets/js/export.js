@@ -12,14 +12,14 @@ export function initExport(state){
   });
 
   // export/import/reset/csv
-  el("btnExport").addEventListener("click", ()=> exportJSON(state));
+  el("btnExport").addEventListener("click", async ()=> exportJSON(state));
   el("fileImport").addEventListener("change", (ev)=> importJSON(state, ev));
   el("btnWipe").addEventListener("click", ()=> wipeAll());
 
-  el("btnCSV").addEventListener("click", ()=> exportCSV(state));
+  el("btnCSV").addEventListener("click", async ()=> exportCSV(state));
 }
 
-export function exportJSON(state){
+export async function exportJSON(state){
   const payload = {
     version: 2,
     exportedAt: new Date().toISOString(),
@@ -27,8 +27,10 @@ export function exportJSON(state){
     budgets: state.budgets,
     transactions: state.tx
   };
-  downloadBlob(JSON.stringify(payload, null, 2), `movimientos_export_${Date.now()}.json`, "application/json");
-  toast("Exportado ✅");
+  const ok = await downloadBlob(JSON.stringify(payload, null, 2), `movimientos_export_${Date.now()}.json`, "application/json", {
+    pickerTypes: [{ description: "JSON", accept: { "application/json": [".json"] } }]
+  });
+  if(ok) toast("Exportado ✅");
 }
 
 export function importJSON(state, ev){
@@ -89,7 +91,7 @@ export function importJSON(state, ev){
   reader.readAsText(file);
 }
 
-export function exportCSV(state){
+export async function exportCSV(state){
   const config = state.config;
   const list = state.tx.slice().sort((a,b)=> (a.date < b.date ? 1 : -1));
 
@@ -121,8 +123,10 @@ export function exportCSV(state){
     return needs ? `"${esc}"` : esc;
   }).join(",")).join("\n");
 
-  downloadBlob(csv, `movimientos_${Date.now()}.csv`, "text/csv");
-  toast("CSV exportado ✅");
+  const ok = await downloadBlob(csv, `movimientos_${Date.now()}.csv`, "text/csv", {
+    pickerTypes: [{ description: "CSV", accept: { "text/csv": [".csv"] } }]
+  });
+  if(ok) toast("CSV exportado ✅");
 }
 
 export function wipeAll(){

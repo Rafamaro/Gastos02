@@ -56,6 +56,7 @@
             <div class="seg" role="radiogroup" aria-label="Tipo de movimiento">
               <label><input type="radio" name="fType" value="expense" checked /> Gasto</label>
               <label><input type="radio" name="fType" value="income" /> Ingreso</label>
+              <label><input type="radio" name="fType" value="reentry" /> Reintegro</label>
             </div>
             <div class="hint" id="hintType">Los presupuestos se aplican a gastos.</div>
           </div>
@@ -89,6 +90,7 @@
               <option>Débito</option>
               <option>Efectivo</option>
               <option>Transferencia</option>
+              <option>Reintegro</option>
               <option>Reingreso por transferencia</option>
               <option>Cripto</option>
               <option>Otro</option>
@@ -146,8 +148,8 @@
             <label>Tipo</label>
             <select id="qType">
               <option value="(Todos)">(Todos)</option>
-              <option value="expense">Gastos</option>
-              <option value="income">Ingresos</option>
+              <option value="income">Ingresos por categoría</option>
+              <option value="expense">Gastos (usa selector Agrupar gastos)</option>
             </select>
           </div>
           <div>
@@ -210,10 +212,10 @@
             </select>
           </div>
           <div>
-            <label>Categorías</label>
+            <label>Imágenes del dashboard</label>
             <select id="dashCatsMode">
-              <option value="expense">Gastos</option>
-              <option value="income">Ingresos</option>
+              <option value="income">Ingresos por categoría</option>
+              <option value="expense">Gastos (usa selector Agrupar gastos)</option>
             </select>
           </div>
           <div>
@@ -241,7 +243,7 @@
           <div class="hint" id="fallbackMonthly" style="display:none"></div>
         </div>
         <div class="chartbox">
-          <h3 id="hCats">Por categoría</h3>
+          <h3 id="hCats">Ingresos por categoría</h3>
           <canvas id="chartCats" height="140"></canvas>
           <div class="hint" id="fallbackCats" style="display:none"></div>
         </div>
@@ -316,6 +318,14 @@
             <label>Categorías de ingresos</label>
             <div id="incomeCategoriesPicker"></div>
             <div class="hint">Usá el desplegable para elegir, “➕ Agregar nuevo...” para crear y “Quitar seleccionada” para eliminar.</div>
+          </div>
+        </div>
+
+        <div class="row" style="margin-top:10px">
+          <div>
+            <label>Categorías de reintegros</label>
+            <div id="reentryCategoriesPicker"></div>
+            <div class="hint">Categorías específicas para reintegros. Suman al neto, pero no al KPI de ingresos.</div>
           </div>
         </div>
 
@@ -444,6 +454,7 @@
             <select id="eType">
               <option value="expense">Gasto</option>
               <option value="income">Ingreso</option>
+              <option value="reentry">Reintegro</option>
             </select>
           </div>
           <div>
@@ -536,7 +547,7 @@
   </script>
 
   <script>
-    window.__APP_VERSION__ = "1.36";
+    window.__APP_VERSION__ = "1.41";
   </script>
   <script type="module" src="/assets/js/app.js"></script>
 </body>
