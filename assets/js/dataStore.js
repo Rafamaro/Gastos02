@@ -74,7 +74,7 @@ async function resolveCategoryIdByName(session, categoryName, type = "expense"){
   return isUUID(id) ? id : null;
 }
 
-async function resolveOrCreateCategoryId(session, categoryRef, type = "expense"){
+const resolveOrCreateCategoryId = async (session, categoryRef, type = "expense") => {
   const safeType = type === "income" ? "income" : "expense";
   if(isUUID(categoryRef)) return String(categoryRef).trim();
 
@@ -125,28 +125,7 @@ async function resolveOrCreateCategoryId(session, categoryRef, type = "expense")
     secondLookup
   };
   throw new Error(`No se pudo resolver/crear la categoría '${name}' (${safeType}) en Directus. Debug: ${JSON.stringify(debugInfo)}`);
-}
-
-async function resolveOrCreateCategoryId(session, categoryRef, type = "expense"){
-  const safeType = type === "income" ? "income" : "expense";
-  const ref = String(categoryRef || "").trim();
-  if(isUUID(ref)) return ref;
-  if(!ref) return null;
-
-  const existingId = await resolveCategoryIdByName(session, ref, safeType);
-  if(isUUID(existingId)) return existingId;
-
-  await createItem({
-    ...directusArgs(session),
-    collection: COLLECTIONS.categories,
-    data: { name: ref, type: safeType, group: null, is_active: true }
-  });
-
-  const createdId = await resolveCategoryIdByName(session, ref, safeType);
-  if(isUUID(createdId)) return createdId;
-
-  throw new Error(`No se pudo resolver/crear la categoría '${ref}' (${safeType}) en Directus.`);
-}
+};
 
 export function getBackendMode(){
   return "local";
