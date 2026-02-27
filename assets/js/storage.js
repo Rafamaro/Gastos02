@@ -16,6 +16,7 @@ export function mergeConfig(parsed){
 
   out.expenseCategories = Array.isArray(out.expenseCategories) ? out.expenseCategories : structuredClone(defaults.expenseCategories);
   out.incomeCategories = Array.isArray(out.incomeCategories) ? out.incomeCategories : structuredClone(defaults.incomeCategories);
+  out.reentryCategories = Array.isArray(out.reentryCategories) ? out.reentryCategories : structuredClone(defaults.reentryCategories || ["Reintegro"]);
   out.expenseGroups = Array.isArray(out.expenseGroups) ? out.expenseGroups : structuredClone(defaults.expenseGroups);
 
   const rawMap = out.expenseCategoryGroups && typeof out.expenseCategoryGroups === "object"
