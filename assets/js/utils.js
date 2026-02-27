@@ -114,8 +114,27 @@ export function topEntry(arr){
   return arr && arr.length ? arr[0] : null;
 }
 
-export function downloadBlob(content, filename, type){
+export async function downloadBlob(content, filename, type, options = {}){
   const blob = new Blob([content], { type });
+  const pickerTypes = options?.pickerTypes || [{ description: type || "Archivo", accept: { [type || "application/octet-stream"]: [`.${String(filename || "").split(".").pop() || "txt"}`] } }];
+
+  if(window?.showSaveFilePicker){
+    try{
+      const handle = await window.showSaveFilePicker({
+        suggestedName: filename,
+        types: pickerTypes,
+        excludeAcceptAllOption: false
+      });
+      const writable = await handle.createWritable();
+      await writable.write(blob);
+      await writable.close();
+      return true;
+    }catch(err){
+      if(err?.name !== "AbortError") console.warn("No se pudo guardar con selector de archivos, se usará descarga del navegador.", err);
+      if(err?.name === "AbortError") return false;
+    }
+  }
+
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
@@ -124,4 +143,5 @@ export function downloadBlob(content, filename, type){
   a.click();
   a.remove();
   URL.revokeObjectURL(url);
+  return true;
 }
