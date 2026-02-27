@@ -1,9 +1,9 @@
 import { el, fillSelect, fmtMoney, toBase, safeTags, normalizeTx, sortTx, todayISO, monthISO, toast, escapeHTML } from "./utils.js";
-import { createTransaction, updateTransaction, deleteTransaction } from "./dataStore.js?v=1772015862292";
+import { createTransaction, updateTransaction, deleteTransaction, listCategories } from "./dataStore.js?v=1772015862292";
 export function initIngreso(state){
   // listeners de refresco externo
-  state.bus.on("config:changed", ()=> {
-    refreshCategorySelects(state);
+  state.bus.on("config:changed", async ()=> {
+    await refreshCategorySelects(state);
     updateAmountHint(state);
     syncLabelsByType(state);
     // re-render si estamos en ingreso
@@ -14,8 +14,8 @@ export function initIngreso(state){
 
   // tipo radio
   document.querySelectorAll('input[name="fType"]').forEach(r=>{
-    r.addEventListener("change", ()=>{
-      refreshCategorySelects(state);
+    r.addEventListener("change", async ()=>{
+      await refreshCategorySelects(state);
       syncLabelsByType(state);
     });
   });
@@ -86,25 +86,72 @@ function unionCategories(config){
   return [...set];
 }
 
-export function refreshCategorySelects(state){
+function setSelectOptions(select, options = []){
+  select.innerHTML = "";
+  for(const option of options){
+    const element = document.createElement("option");
+    element.value = String(option.value ?? "");
+    element.textContent = String(option.label ?? option.value ?? "");
+    select.appendChild(element);
+  }
+}
+
+async function loadCategoryOptions(state, type){
+  const config = state.config;
+  const configuredNames = type === "income" ? (config.incomeCategories || []) : (config.expenseCategories || []);
+
+  if(state.directus?.connected){
+    const rows = await listCategories({ type });
+    const byName = new Map(
+      rows
+        .filter(row => row?.id && row?.name)
+        .map(row => [String(row.name).trim().toLowerCase(), row])
+    );
+
+    const options = configuredNames.map(name => {
+      const cleanName = String(name || "").trim();
+      const matched = byName.get(cleanName.toLowerCase());
+      return { value: matched?.id || cleanName, label: cleanName };
+    }).filter(opt => opt.label);
+
+    for(const row of rows || []){
+      const cleanName = String(row?.name || "").trim();
+      if(!cleanName) continue;
+      if(options.some(opt => opt.label.toLowerCase() === cleanName.toLowerCase())) continue;
+      options.push({ value: row.id, label: cleanName });
+    }
+
+    if(options.length) return options;
+  }
+
+  const fallback = configuredNames.length ? configuredNames : ["Otros"];
+  return fallback.map(name => ({ value: name, label: name }));
+}
+
+export async function refreshCategorySelects(state){
   const config = state.config;
 
-  // form category depende del tipo
   const t = currentFormType();
-  const cats = t==="income" ? config.incomeCategories : config.expenseCategories;
-  fillSelect(el("fCategory"), cats.length ? cats : ["Otros"]);
+  const formOptions = await loadCategoryOptions(state, t);
+  const currentFormValue = el("fCategory").value;
+  setSelectOptions(el("fCategory"), formOptions);
+  el("fCategory").value = formOptions.some(opt => opt.value === currentFormValue)
+    ? currentFormValue
+    : (formOptions[0]?.value || "");
 
-  // filtro usa unión y conserva selección previa si sigue disponible
   const qCategory = el("qCategory");
   const previousFilter = qCategory.value;
   const allCategories = ["(Todas)", ...unionCategories(config)];
   fillSelect(qCategory, allCategories);
   qCategory.value = allCategories.includes(previousFilter) ? previousFilter : "(Todas)";
 
-  // edit depende del tipo actual de edición
   const et = el("eType").value || "expense";
-  const ecats = et==="income" ? config.incomeCategories : config.expenseCategories;
-  fillSelect(el("eCategory"), ecats.length ? ecats : ["Otros"]);
+  const editOptions = await loadCategoryOptions(state, et);
+  const currentEditValue = el("eCategory").value;
+  setSelectOptions(el("eCategory"), editOptions);
+  el("eCategory").value = editOptions.some(opt => opt.value === currentEditValue)
+    ? currentEditValue
+    : (editOptions[0]?.value || "");
 }
 
 export function syncLabelsByType(state){
@@ -155,12 +202,15 @@ export async function addTx(state){
   }
 
   const t = currentFormType();
+  const selectedCategoryId = el("fCategory").value;
+  const selectedCategoryName = el("fCategory").selectedOptions?.[0]?.textContent || selectedCategoryId;
   const x = normalizeTx({
     type: t,
     date: el("fDate").value || todayISO(),
     amount,
     currency: el("fCurrency").value,
-    category: el("fCategory").value,
+    category: selectedCategoryName,
+    categoryId: selectedCategoryId,
     pay: el("fPay").value,
     vendor: el("fVendor").value.trim(),
     desc: el("fDesc").value.trim(),
@@ -168,7 +218,7 @@ export async function addTx(state){
     notes: el("fNotes").value.trim(),
   }, config);
 
-  const saved = await createTransaction(x);
+  const saved = await createTransaction({ ...x, categoryId: selectedCategoryId });
   state.tx.unshift({ ...x, id: saved?.id || x.id });
 
   toast("Guardado ✅");
@@ -269,21 +319,23 @@ function rowHTML(x, config){
   `;
 }
 
-export function openEdit(state, txId){
+export async function openEdit(state, txId){
   const config = state.config;
   const x = state.tx.find(e => e.id === txId);
   if(!x){ toast("No se encontró.", "danger"); return; }
 
   el("eId").value = x.id;
   el("eType").value = x.type;
-  refreshCategorySelects(state);
+  await refreshCategorySelects(state);
 
   el("eDate").value = x.date;
   el("eAmount").value = x.amount;
   el("eCurrency").value = x.currency;
 
   // después del refreshCategorySelects
-  el("eCategory").value = x.category;
+  const eCategory = el("eCategory");
+  const byName = Array.from(eCategory.options).find(opt => opt.textContent === x.category);
+  eCategory.value = byName?.value || x.category;
   el("ePay").value = x.pay;
 
   el("eVendor").value = x.vendor;
@@ -306,13 +358,16 @@ export async function saveEdit(state){
     return;
   }
 
+  const selectedEditCategoryId = el("eCategory").value;
+  const selectedEditCategoryName = el("eCategory").selectedOptions?.[0]?.textContent || selectedEditCategoryId;
   const updated = normalizeTx({
     id: idv,
     type: el("eType").value,
     date: el("eDate").value || todayISO(),
     amount,
     currency: el("eCurrency").value,
-    category: el("eCategory").value,
+    category: selectedEditCategoryName,
+    categoryId: selectedEditCategoryId,
     pay: el("ePay").value,
     vendor: el("eVendor").value.trim(),
     desc: el("eDesc").value.trim(),
@@ -320,7 +375,7 @@ export async function saveEdit(state){
     notes: el("eNotes").value.trim(),
   }, config);
 
-  await updateTransaction(idv, updated);
+  await updateTransaction(idv, { ...updated, categoryId: selectedEditCategoryId });
   state.tx[idx] = updated;
   el("dlgEdit").close();
 
