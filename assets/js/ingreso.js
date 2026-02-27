@@ -1,9 +1,9 @@
 import { el, fillSelect, fmtMoney, toBase, safeTags, normalizeTx, sortTx, todayISO, monthISO, toast, escapeHTML } from "./utils.js";
-import { createTransaction, updateTransaction, deleteTransaction } from "./dataStore.js?v=1772015862292";
+import { createTransaction, updateTransaction, deleteTransaction, listCategories } from "./dataStore.js?v=1772015862292";
 export function initIngreso(state){
   // listeners de refresco externo
-  state.bus.on("config:changed", ()=> {
-    refreshCategorySelects(state);
+  state.bus.on("config:changed", async ()=> {
+    await refreshCategorySelects(state);
     updateAmountHint(state);
     syncLabelsByType(state);
     // re-render si estamos en ingreso
@@ -14,8 +14,8 @@ export function initIngreso(state){
 
   // tipo radio
   document.querySelectorAll('input[name="fType"]').forEach(r=>{
-    r.addEventListener("change", ()=>{
-      refreshCategorySelects(state);
+    r.addEventListener("change", async ()=>{
+      await refreshCategorySelects(state);
       syncLabelsByType(state);
     });
   });
@@ -82,40 +82,96 @@ export function currentFormType(){
 }
 
 function unionCategories(config){
-  const set = new Set([...(config.expenseCategories||[]), ...(config.incomeCategories||[])]);
+  const set = new Set([...(config.expenseCategories||[]), ...(config.incomeCategories||[]), ...(config.reentryCategories||[])]);
   return [...set];
 }
 
-export function refreshCategorySelects(state){
+function setSelectOptions(select, options = []){
+  select.innerHTML = "";
+  for(const option of options){
+    const element = document.createElement("option");
+    element.value = String(option.value ?? "");
+    element.textContent = String(option.label ?? option.value ?? "");
+    select.appendChild(element);
+  }
+}
+
+async function loadCategoryOptions(state, type){
+  const config = state.config;
+  const configuredNames = type === "income"
+    ? (config.incomeCategories || [])
+    : type === "reentry"
+      ? (config.reentryCategories || ["Reintegro"])
+      : (config.expenseCategories || []);
+
+  if(state.directus?.connected){
+    const rows = await listCategories({ type });
+    const byName = new Map(
+      rows
+        .filter(row => row?.id && row?.name)
+        .map(row => [String(row.name).trim().toLowerCase(), row])
+    );
+
+    const options = configuredNames.map(name => {
+      const cleanName = String(name || "").trim();
+      const matched = byName.get(cleanName.toLowerCase());
+      return { value: matched?.id || cleanName, label: cleanName };
+    }).filter(opt => opt.label);
+
+    for(const row of rows || []){
+      if(type === "reentry") continue;
+      const cleanName = String(row?.name || "").trim();
+      if(!cleanName) continue;
+      if(options.some(opt => opt.label.toLowerCase() === cleanName.toLowerCase())) continue;
+      options.push({ value: row.id, label: cleanName });
+    }
+
+    if(options.length) return options;
+  }
+
+  const fallback = configuredNames.length ? configuredNames : ["Otros"];
+  return fallback.map(name => ({ value: name, label: name }));
+}
+
+export async function refreshCategorySelects(state){
   const config = state.config;
 
-  // form category depende del tipo
   const t = currentFormType();
-  const cats = t==="income" ? config.incomeCategories : config.expenseCategories;
-  fillSelect(el("fCategory"), cats.length ? cats : ["Otros"]);
+  const formOptions = await loadCategoryOptions(state, t);
+  const currentFormValue = el("fCategory").value;
+  setSelectOptions(el("fCategory"), formOptions);
+  el("fCategory").value = formOptions.some(opt => opt.value === currentFormValue)
+    ? currentFormValue
+    : (formOptions[0]?.value || "");
 
-  // filtro usa unión y conserva selección previa si sigue disponible
   const qCategory = el("qCategory");
   const previousFilter = qCategory.value;
   const allCategories = ["(Todas)", ...unionCategories(config)];
   fillSelect(qCategory, allCategories);
   qCategory.value = allCategories.includes(previousFilter) ? previousFilter : "(Todas)";
 
-  // edit depende del tipo actual de edición
   const et = el("eType").value || "expense";
-  const ecats = et==="income" ? config.incomeCategories : config.expenseCategories;
-  fillSelect(el("eCategory"), ecats.length ? ecats : ["Otros"]);
+  const editOptions = await loadCategoryOptions(state, et);
+  const currentEditValue = el("eCategory").value;
+  setSelectOptions(el("eCategory"), editOptions);
+  el("eCategory").value = editOptions.some(opt => opt.value === currentEditValue)
+    ? currentEditValue
+    : (editOptions[0]?.value || "");
 }
 
 export function syncLabelsByType(state){
   const t = currentFormType();
-  el("labVendor").textContent = t==="income" ? "Origen" : "Comercio / Lugar";
-  el("labPay").textContent = t==="income" ? "Fuente / Medio" : "Medio de pago";
+  el("labVendor").textContent = (t==="income" || t==="reentry") ? "Origen" : "Comercio / Lugar";
+  el("labPay").textContent = (t==="income" || t==="reentry") ? "Fuente / Medio" : "Medio de pago";
   el("labCategory").textContent = "Categoría";
   el("hintType").textContent = t==="income"
-    ? "Ingreso: suma al neto."
-    : "Gasto: resta al neto (y aplica presupuesto si lo definiste).";
+    ? "Ingreso: suma al neto y al KPI de ingresos."
+    : t==="reentry"
+      ? "Reintegro: suma al neto, pero no al KPI de ingresos."
+      : "Gasto: resta al neto (y aplica presupuesto si lo definiste).";
   updateAmountHint(state);
+
+  if(t === "reentry" && el("fPay").value !== "Reintegro") el("fPay").value = "Reintegro";
 }
 
 export function updateAmountHint(state){
@@ -155,20 +211,26 @@ export async function addTx(state){
   }
 
   const t = currentFormType();
+  const selectedCategoryId = el("fCategory").value;
+  const effectiveType = t === "reentry" ? "income" : t;
+  const effectivePay = t === "reentry" ? "Reintegro" : el("fPay").value;
+  const selectedCategoryName = el("fCategory").selectedOptions?.[0]?.textContent || selectedCategoryId;
   const x = normalizeTx({
-    type: t,
+    type: effectiveType,
+    uiType: t,
     date: el("fDate").value || todayISO(),
     amount,
     currency: el("fCurrency").value,
-    category: el("fCategory").value,
-    pay: el("fPay").value,
+    category: selectedCategoryName,
+    categoryId: selectedCategoryId,
+    pay: effectivePay,
     vendor: el("fVendor").value.trim(),
     desc: el("fDesc").value.trim(),
     tags: safeTags(el("fTags").value),
     notes: el("fNotes").value.trim(),
   }, config);
 
-  const saved = await createTransaction(x);
+  const saved = await createTransaction({ ...x, categoryId: selectedCategoryId });
   state.tx.unshift({ ...x, id: saved?.id || x.id });
 
   toast("Guardado ✅");
@@ -191,7 +253,10 @@ export function getFiltered(state){
 
   let list = state.tx.map(x => normalizeTx(x, config));
 
-  if(type && type !== "(Todos)") list = list.filter(x => x.type === type);
+  if(type && type !== "(Todos)"){
+    if(type === "reentry") list = list.filter(x => String(x.pay||"").trim().toLowerCase() === "reintegro");
+    else list = list.filter(x => x.type === type && String(x.pay||"").trim().toLowerCase() !== "reintegro");
+  }
   if(cat && cat !== "(Todas)") list = list.filter(x => x.category === cat);
   if(from) list = list.filter(x => x.date >= from);
   if(to) list = list.filter(x => x.date <= to);
@@ -239,8 +304,13 @@ export function renderList(state){
 function rowHTML(x, config){
   const tags = (x.tags||[]).slice(0,6).map(t=>`<span class="tag">#${escapeHTML(t)}</span>`).join("");
   const base = toBase(x.amount, x.currency, config);
-  const sign = x.type==="income" ? "+" : "−";
-  const badge = x.type==="income" ? `<span class="badge income">Ingreso</span>` : `<span class="badge expense">Gasto</span>`;
+  const isReentry = x.type==="income" && String(x.pay||"").trim().toLowerCase()==="reintegro";
+  const sign = x.type==="expense" ? "−" : "+";
+  const badge = isReentry
+    ? `<span class="badge income">Reintegro</span>`
+    : x.type==="income"
+      ? `<span class="badge income">Ingreso</span>`
+      : `<span class="badge expense">Gasto</span>`;
 
   const moneyRaw = x.currency === config.baseCurrency
     ? fmtMoney(x.amount, x.currency, config)
@@ -269,22 +339,24 @@ function rowHTML(x, config){
   `;
 }
 
-export function openEdit(state, txId){
+export async function openEdit(state, txId){
   const config = state.config;
   const x = state.tx.find(e => e.id === txId);
   if(!x){ toast("No se encontró.", "danger"); return; }
 
   el("eId").value = x.id;
-  el("eType").value = x.type;
-  refreshCategorySelects(state);
+  el("eType").value = (x.type === "income" && String(x.pay||"").trim().toLowerCase()==="reintegro") ? "reentry" : x.type;
+  await refreshCategorySelects(state);
 
   el("eDate").value = x.date;
   el("eAmount").value = x.amount;
   el("eCurrency").value = x.currency;
 
   // después del refreshCategorySelects
-  el("eCategory").value = x.category;
-  el("ePay").value = x.pay;
+  const eCategory = el("eCategory");
+  const byName = Array.from(eCategory.options).find(opt => opt.textContent === x.category);
+  eCategory.value = byName?.value || x.category;
+  el("ePay").value = (x.type === "income" && String(x.pay||"").trim().toLowerCase()==="reintegro") ? "Reintegro" : x.pay;
 
   el("eVendor").value = x.vendor;
   el("eDesc").value = x.desc;
@@ -306,21 +378,29 @@ export async function saveEdit(state){
     return;
   }
 
+  const selectedEditCategoryId = el("eCategory").value;
+  const editType = el("eType").value;
+  const effectiveEditType = editType === "reentry" ? "income" : editType;
+  const effectiveEditPay = editType === "reentry" ? "Reintegro" : el("ePay").value;
+  if(editType === "reentry") el("ePay").value = "Reintegro";
+  const selectedEditCategoryName = el("eCategory").selectedOptions?.[0]?.textContent || selectedEditCategoryId;
   const updated = normalizeTx({
     id: idv,
-    type: el("eType").value,
+    type: effectiveEditType,
+    uiType: editType,
     date: el("eDate").value || todayISO(),
     amount,
     currency: el("eCurrency").value,
-    category: el("eCategory").value,
-    pay: el("ePay").value,
+    category: selectedEditCategoryName,
+    categoryId: selectedEditCategoryId,
+    pay: effectiveEditPay,
     vendor: el("eVendor").value.trim(),
     desc: el("eDesc").value.trim(),
     tags: safeTags(el("eTags").value),
     notes: el("eNotes").value.trim(),
   }, config);
 
-  await updateTransaction(idv, updated);
+  await updateTransaction(idv, { ...updated, categoryId: selectedEditCategoryId });
   state.tx[idx] = updated;
   el("dlgEdit").close();
 
