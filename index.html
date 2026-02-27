@@ -148,9 +148,8 @@
             <label>Tipo</label>
             <select id="qType">
               <option value="(Todos)">(Todos)</option>
-              <option value="expense">Gastos</option>
-              <option value="income">Ingresos</option>
-              <option value="reentry">Reintegros</option>
+              <option value="income">Ingresos por categoría</option>
+              <option value="expense">Gastos (usa selector Agrupar gastos)</option>
             </select>
           </div>
           <div>
@@ -213,11 +212,10 @@
             </select>
           </div>
           <div>
-            <label>Categorías</label>
+            <label>Imágenes del dashboard</label>
             <select id="dashCatsMode">
-              <option value="expense">Gastos</option>
-              <option value="income">Ingresos</option>
-              <option value="reentry">Reintegros</option>
+              <option value="income">Ingresos por categoría</option>
+              <option value="expense">Gastos (usa selector Agrupar gastos)</option>
             </select>
           </div>
           <div>
@@ -245,7 +243,7 @@
           <div class="hint" id="fallbackMonthly" style="display:none"></div>
         </div>
         <div class="chartbox">
-          <h3 id="hCats">Por categoría</h3>
+          <h3 id="hCats">Ingresos por categoría</h3>
           <canvas id="chartCats" height="140"></canvas>
           <div class="hint" id="fallbackCats" style="display:none"></div>
         </div>
@@ -549,7 +547,7 @@
   </script>
 
   <script>
-    window.__APP_VERSION__ = "1.38";
+    window.__APP_VERSION__ = "1.40";
   </script>
   <script type="module" src="/assets/js/app.js"></script>
 </body>
