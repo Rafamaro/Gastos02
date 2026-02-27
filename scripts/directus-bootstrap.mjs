@@ -106,6 +106,32 @@ async function ensureField(token, collection, field, type, extras = {}){
 }
 
 
+async function ensureFieldPrecisionScale(token, collection, field, { precision, scale } = {}){
+  const fields = await listFields(token, collection);
+  const current = fields.find((item) => item?.field === field);
+  if(!current) return;
+
+  const currentPrecision = Number(current?.schema?.numeric_precision ?? current?.schema?.precision ?? NaN);
+  const currentScale = Number(current?.schema?.numeric_scale ?? current?.schema?.scale ?? NaN);
+  if(currentPrecision === Number(precision) && currentScale === Number(scale)){
+    summary.fields.push(`${collection}.${field}:precision-ok`);
+    return;
+  }
+
+  await http(`/fields/${collection}/${field}`, {
+    method: "PATCH",
+    token,
+    body: {
+      schema: {
+        numeric_precision: Number(precision),
+        numeric_scale: Number(scale)
+      }
+    }
+  });
+  summary.fields.push(`${collection}.${field}:precision-updated`);
+  console.log(`✅ Actualizado ${collection}.${field} a numeric(${precision},${scale})`);
+}
+
 
 async function ensurePolicy(token, name){
   const found = await http(`/policies?filter[name][_eq]=${encodeURIComponent(name)}&limit=1`, { token });
@@ -233,7 +259,8 @@ async function ensureSchema(token){
   await ensureField(token, "groups", "is_active", "boolean", { schema: { is_nullable: false, default_value: true } });
 
   await ensureField(token, "movements", "date", "date", { schema: { is_nullable: false }, meta: { required: true } });
-  await ensureField(token, "movements", "amount", "decimal", { schema: { is_nullable: false }, meta: { required: true } });
+  await ensureField(token, "movements", "amount", "decimal", { schema: { is_nullable: false, numeric_precision: 14, numeric_scale: 2 }, meta: { required: true } });
+  await ensureFieldPrecisionScale(token, "movements", "amount", { precision: 14, scale: 2 });
   await ensureField(token, "movements", "type", "string", { schema: { is_nullable: false, default_value: "expense" }, meta: { required: true, options: { choices: [{ text: "expense", value: "expense" }, { text: "income", value: "income" }] } } });
   await ensureField(token, "movements", "category", "uuid", { schema: { is_nullable: false, foreign_key_table: "categories", foreign_key_column: "id" }, meta: { special: ["m2o"], interface: "select-dropdown-m2o", required: true } });
   await ensureField(token, "movements", "group_snapshot", "string", { schema: { is_nullable: true } });
