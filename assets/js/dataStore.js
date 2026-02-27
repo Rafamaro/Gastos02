@@ -15,6 +15,43 @@ const COLLECTIONS = {
   importsLog: "imports_log"
 };
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function isValidId(v){
+  if(typeof v === "number" && Number.isFinite(v)) return true;
+  const s = String(v ?? "").trim();
+  return UUID_RE.test(s) || /^\d+$/.test(s);
+}
+
+function normalizeId(v){
+  if(typeof v === "number" && Number.isFinite(v)) return v;
+  const s = String(v ?? "").trim();
+  if(!s) return null;
+  if(UUID_RE.test(s)) return s;
+  if(/^\d+$/.test(s)) return Number(s);
+  return null;
+}
+
+function extractId(res){
+  if(res && typeof res === "object" && "id" in res && isValidId(res.id)) return res.id;
+  if(res?.data && typeof res.data === "object" && "id" in res.data && isValidId(res.data.id)) return res.data.id;
+  if(Array.isArray(res) && res[0]?.id && isValidId(res[0].id)) return res[0].id;
+  if(Array.isArray(res?.data) && res.data[0]?.id && isValidId(res.data[0].id)) return res.data[0].id;
+  if(res?.data?.data?.id && isValidId(res.data.data.id)) return res.data.data.id;
+  if(Array.isArray(res?.data?.data) && res.data.data[0]?.id && isValidId(res.data.data[0].id)) return res.data.data[0].id;
+  return null;
+}
+
+function buildDirectusDebugInfo(errorOrNull, responseOrNull){
+  const out = {};
+  if(errorOrNull){
+    out.status = errorOrNull?.status || null;
+    out.body = errorOrNull?.payload || errorOrNull?.message || null;
+  }
+  if(responseOrNull !== undefined) out.response = responseOrNull ?? null;
+  return out;
+}
+
 async function getDirectusSession(){
   try{
     const session = await ensureDirectusClientSession();
@@ -29,17 +66,75 @@ function directusArgs(session){
 }
 
 async function resolveCategoryIdByName(session, categoryName, type = "expense"){
+  const safeType = type === "income" ? "income" : "expense";
   const list = await listItems({
     ...directusArgs(session),
     collection: COLLECTIONS.categories,
     query: {
       limit: 1,
-      filter: { name: { _eq: String(categoryName || "").trim() }, type: { _eq: type === "income" ? "income" : "expense" } },
+      filter: { name: { _eq: String(categoryName || "").trim() }, type: { _eq: safeType } },
       fields: ["id"]
     }
   });
-  return list[0]?.id || null;
+  const id = extractId(list);
+  return isValidId(id) ? normalizeId(id) : null;
 }
+
+const resolveOrCreateCategoryId = async (session, categoryRef, type = "expense") => {
+  const safeType = type === "income" ? "income" : "expense";
+
+  if(typeof categoryRef === "number" && Number.isFinite(categoryRef)) return categoryRef;
+  const directId = normalizeId(categoryRef);
+  if(directId !== null) return directId;
+
+  const name = String(categoryRef ?? "").trim();
+  if(!name) return null;
+
+  const firstLookup = await listItems({
+    ...directusArgs(session),
+    collection: COLLECTIONS.categories,
+    query: {
+      limit: 1,
+      filter: { name: { _eq: name }, type: { _eq: safeType } },
+      fields: ["id"]
+    }
+  });
+  const firstId = normalizeId(extractId(firstLookup));
+  if(firstId !== null) return firstId;
+
+  let postRes = null;
+  let postErr = null;
+  try{
+    postRes = await createItem({
+      ...directusArgs(session),
+      collection: COLLECTIONS.categories,
+      data: { name, type: safeType, group: null, is_active: true }
+    });
+    const postId = normalizeId(extractId(postRes));
+    if(postId !== null) return postId;
+  }catch(err){
+    postErr = err;
+  }
+
+  const secondLookup = await listItems({
+    ...directusArgs(session),
+    collection: COLLECTIONS.categories,
+    query: {
+      limit: 1,
+      filter: { name: { _eq: name }, type: { _eq: safeType } },
+      fields: ["id"]
+    }
+  });
+  const secondId = normalizeId(extractId(secondLookup));
+  if(secondId !== null) return secondId;
+
+  const debugInfo = {
+    post: buildDirectusDebugInfo(postErr, postRes),
+    firstLookup,
+    secondLookup
+  };
+  throw new Error(`No se pudo resolver/crear la categoría '${name}' (${safeType}) en Directus. Debug: ${JSON.stringify(debugInfo)}`);
+};
 
 export function getBackendMode(){
   return "local";
@@ -89,6 +184,7 @@ export async function saveSettings(payload){
   const merged = mergeConfig({ ...loadConfig(), ...(payload || {}) });
   merged.expenseCategories = unique(merged.expenseCategories);
   merged.incomeCategories = unique(merged.incomeCategories);
+  merged.reentryCategories = unique(merged.reentryCategories);
   merged.expenseGroups = unique(merged.expenseGroups);
   const session = await getDirectusSession();
   if(session){
@@ -169,7 +265,10 @@ export async function listCategories({ type } = {}){
   const session = await getDirectusSession();
   if(session){
     const query = { fields: ["id", "name", "type", "group", "group.id", "group.name", "sort", "color", "icon", "is_active"], sort: ["sort", "name"], limit: 1000 };
-    if(type) query.filter = { type: { _eq: type } };
+    if(type){
+      const safeType = type === "reentry" ? "income" : type;
+      query.filter = { type: { _eq: safeType } };
+    }
     return listItems({ ...directusArgs(session), collection: COLLECTIONS.categories, query });
   }
   const cfg = loadConfig();
@@ -180,8 +279,10 @@ export async function listCategories({ type } = {}){
       type: "expense",
       group: cfg.expenseCategoryGroups?.[name] ? { name: cfg.expenseCategoryGroups[name], type: "group" } : null
     })),
-    ...(cfg.incomeCategories || []).map(name => ({ id: `income:${name}`, name, type: "income", group: null }))
+    ...(cfg.incomeCategories || []).map(name => ({ id: `income:${name}`, name, type: "income", group: null })),
+    ...(cfg.reentryCategories || []).map(name => ({ id: `reentry:${name}`, name, type: "reentry", group: null }))
   ];
+  if(type === "reentry") return local.filter(x => x.type === "reentry");
   return type ? local.filter(x => x.type === type) : local;
 }
 
@@ -289,7 +390,7 @@ export async function listTransactions(){
       id: row.id,
       date: row.date,
       amount: Number(row.amount) || 0,
-      type: row.type,
+      type: row.type === "income" && String(row.source || "").trim().toLowerCase() === "reintegro" ? "reentry" : row.type,
       category: row.category?.name || "",
       desc: row.note || "",
       notes: row.note || "",
@@ -306,8 +407,14 @@ export async function createTransaction(payload){
   const session = await getDirectusSession();
   if(session){
     const normalized = normalizeTx(payload, loadConfig());
-    const categoryId = await resolveCategoryIdByName(session, normalized.category, normalized.type);
-    if(!categoryId) throw new Error(`No existe categoría '${normalized.category}' (${normalized.type}) en Directus`);
+    const selectedCategoryValue = String(payload?.categoryId || "").trim();
+    const categoryRef = isValidId(selectedCategoryValue)
+      ? normalizeId(selectedCategoryValue)
+      : String(normalized.category || payload?.category || "").trim();
+    const categoryId = await resolveOrCreateCategoryId(session, categoryRef, normalized.type);
+
+    if(!isValidId(categoryId)) throw new Error("No se pudo resolver la categoría del movimiento.");
+
     const saved = await createItem({
       ...directusArgs(session),
       collection: COLLECTIONS.movements,
@@ -336,10 +443,16 @@ export async function updateTransaction(id, payload){
   const session = await getDirectusSession();
   if(session){
     const data = { ...payload };
-    if(payload?.category){
-      const categoryId = await resolveCategoryIdByName(session, payload.category, payload.type || "expense");
-      if(categoryId) data.category = categoryId;
+    const selectedCategoryValue = String(payload?.categoryId || "").trim();
+    const categoryRef = isValidId(selectedCategoryValue)
+      ? normalizeId(selectedCategoryValue)
+      : String(payload?.category || "").trim();
+    if(categoryRef){
+      const categoryId = await resolveOrCreateCategoryId(session, categoryRef, payload?.type || "expense");
+      if(!isValidId(categoryId)) throw new Error("No se pudo resolver la categoría del movimiento.");
+      data.category = categoryId;
     }
+    delete data.categoryId;
     if(payload?.notes || payload?.desc) data.note = payload.notes || payload.desc;
     return updateItem({ ...directusArgs(session), collection: COLLECTIONS.movements, id, data });
   }
@@ -475,47 +588,30 @@ export async function importMonthlyJson({ batchId, month, movements = [], source
     return { skipped: true, reason: "batch_exists", imported_batch_id: safeBatchId, inserted: 0 };
   }
 
-  const categories = await listItems({ ...directusArgs(session), collection: COLLECTIONS.categories, query: { fields: ["id", "name", "type", "group", "group.id", "group.name"], limit: 2000 } });
-  const groups = await listItems({ ...directusArgs(session), collection: COLLECTIONS.groups, query: { fields: ["id", "name", "type"], limit: 1000 } });
-  const categoryMap = new Map(categories.map(c => [`${c.type}:${c.name}`.toLowerCase(), c]));
-  const groupMap = new Map(groups.map(g => [String(g.name || "").toLowerCase(), g]));
-
+  const mappedPayload = [];
   for(const mov of movements){
-    const safeType = mov.type === "income" ? "income" : "expense";
-    const safeName = String(mov.category || "").trim();
-    if(!safeName) continue;
-    const key = `${safeType}:${safeName}`.toLowerCase();
-    if(!categoryMap.has(key)){
-      const groupName = String(mov.group || "").trim();
-      let groupId = null;
-      if(groupName){
-        const gKey = groupName.toLowerCase();
-        if(!groupMap.has(gKey)){
-          const createdGroup = await createItem({ ...directusArgs(session), collection: COLLECTIONS.groups, data: { name: groupName, type: safeType, is_active: true } });
-          groupMap.set(gKey, createdGroup);
-        }
-        groupId = groupMap.get(gKey)?.id || null;
-      }
-      const createdCategory = await createItem({ ...directusArgs(session), collection: COLLECTIONS.categories, data: { name: safeName, type: safeType, group: groupId, is_active: true } });
-      categoryMap.set(key, createdCategory);
-    }
-  }
-
-  const payload = movements.map(mov => {
-    const safeType = mov.type === "income" ? "income" : "expense";
-    const safeName = String(mov.category || "").trim();
-    const category = categoryMap.get(`${safeType}:${safeName}`.toLowerCase());
-    return {
+    const safeType = mov.type === "income" || mov.type === "reentry" ? "income" : "expense";
+    const categoryRef = String(mov.category || "").trim();
+    if(!categoryRef) continue;
+    const categoryId = await resolveOrCreateCategoryId(session, categoryRef, safeType);
+    mappedPayload.push({
       date: mov.date,
       amount: Number(mov.amount) || 0,
       type: safeType,
-      category: category?.id,
-      group_snapshot: mov.group || category?.group?.name || "",
+      category: categoryId,
+      group_snapshot: mov.group || "",
       note: mov.note || mov.notes || mov.desc || "",
       source,
       imported_batch_id: safeBatchId
-    };
-  }).filter(x => x.category && x.date);
+    });
+  }
+
+  const invalidCategoryRow = mappedPayload.find(item => !isValidId(item.category));
+  if(invalidCategoryRow){
+    throw new Error("Importación inválida: se detectaron categorías sin id válido.");
+  }
+
+  const payload = mappedPayload.filter(x => x.category && x.date);
 
   const inserted = payload.length ? await createItems({ ...directusArgs(session), collection: COLLECTIONS.movements, data: payload }) : [];
   await createItem({
