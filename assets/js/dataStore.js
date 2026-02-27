@@ -17,8 +17,12 @@ const COLLECTIONS = {
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-function isUuid(value){
+function isUUID(value){
   return UUID_REGEX.test(String(value || "").trim());
+}
+
+function isUuid(value){
+  return isUUID(value);
 }
 
 
@@ -51,18 +55,22 @@ async function resolveCategoryIdByName(session, categoryName, type = "expense"){
 async function resolveOrCreateCategoryId(session, categoryRef, type = "expense"){
   const safeType = type === "income" ? "income" : "expense";
   const ref = String(categoryRef || "").trim();
-  if(isUuid(ref)) return ref;
+  if(isUUID(ref)) return ref;
   if(!ref) return null;
 
   const existingId = await resolveCategoryIdByName(session, ref, safeType);
-  if(isUuid(existingId)) return existingId;
+  if(isUUID(existingId)) return existingId;
 
-  const created = await createItem({
+  await createItem({
     ...directusArgs(session),
     collection: COLLECTIONS.categories,
-    data: { name: ref, type: safeType, is_active: true }
+    data: { name: ref, type: safeType, group: null, is_active: true }
   });
-  return isUuid(created?.id) ? created.id : null;
+
+  const createdId = await resolveCategoryIdByName(session, ref, safeType);
+  if(isUUID(createdId)) return createdId;
+
+  throw new Error(`No se pudo resolver/crear la categoría '${ref}' (${safeType}) en Directus.`);
 }
 
 export function getBackendMode(){
@@ -330,12 +338,13 @@ export async function createTransaction(payload){
   const session = await getDirectusSession();
   if(session){
     const normalized = normalizeTx(payload, loadConfig());
-    const categoryRef = String(payload?.categoryId || normalized.category || payload?.category || "").trim();
+    const selectedCategoryValue = String(payload?.categoryId || "").trim();
+    const categoryRef = isUUID(selectedCategoryValue)
+      ? selectedCategoryValue
+      : String(normalized.category || payload?.category || "").trim();
     const categoryId = await resolveOrCreateCategoryId(session, categoryRef, normalized.type);
 
-    if(!isUuid(categoryId)){
-      throw new Error("No se pudo resolver/crear la categoría en Directus.");
-    }
+    if(!isUUID(categoryId)) throw new Error("No se pudo resolver la categoría del movimiento.");
 
     const saved = await createItem({
       ...directusArgs(session),
@@ -365,10 +374,13 @@ export async function updateTransaction(id, payload){
   const session = await getDirectusSession();
   if(session){
     const data = { ...payload };
-    const categoryRef = String(payload?.categoryId || payload?.category || "").trim();
+    const selectedCategoryValue = String(payload?.categoryId || "").trim();
+    const categoryRef = isUUID(selectedCategoryValue)
+      ? selectedCategoryValue
+      : String(payload?.category || "").trim();
     if(categoryRef){
-      const categoryId = await resolveOrCreateCategoryId(session, payload?.category || categoryRef, payload?.type || "expense");
-      if(!isUuid(categoryId)) throw new Error("No se pudo resolver/crear la categoría en Directus.");
+      const categoryId = await resolveOrCreateCategoryId(session, categoryRef, payload?.type || "expense");
+      if(!isUUID(categoryId)) throw new Error("No se pudo resolver la categoría del movimiento.");
       data.category = categoryId;
     }
     delete data.categoryId;
@@ -507,49 +519,25 @@ export async function importMonthlyJson({ batchId, month, movements = [], source
     return { skipped: true, reason: "batch_exists", imported_batch_id: safeBatchId, inserted: 0 };
   }
 
-  const categories = await listItems({ ...directusArgs(session), collection: COLLECTIONS.categories, query: { fields: ["id", "name", "type", "group", "group.id", "group.name"], limit: 2000 } });
-  const groups = await listItems({ ...directusArgs(session), collection: COLLECTIONS.groups, query: { fields: ["id", "name", "type"], limit: 1000 } });
-  const categoryMap = new Map(categories.map(c => [`${c.type}:${c.name}`.toLowerCase(), c]));
-  const groupMap = new Map(groups.map(g => [String(g.name || "").toLowerCase(), g]));
-
+  const mappedPayload = [];
   for(const mov of movements){
     const safeType = mov.type === "income" ? "income" : "expense";
-    const safeName = String(mov.category || "").trim();
-    if(!safeName) continue;
-    const key = `${safeType}:${safeName}`.toLowerCase();
-    if(!categoryMap.has(key)){
-      const groupName = String(mov.group || "").trim();
-      let groupId = null;
-      if(groupName){
-        const gKey = groupName.toLowerCase();
-        if(!groupMap.has(gKey)){
-          const createdGroup = await createItem({ ...directusArgs(session), collection: COLLECTIONS.groups, data: { name: groupName, type: safeType, is_active: true } });
-          groupMap.set(gKey, createdGroup);
-        }
-        groupId = groupMap.get(gKey)?.id || null;
-      }
-      const createdCategory = await createItem({ ...directusArgs(session), collection: COLLECTIONS.categories, data: { name: safeName, type: safeType, group: groupId, is_active: true } });
-      categoryMap.set(key, createdCategory);
-    }
-  }
-
-  const mappedPayload = movements.map(mov => {
-    const safeType = mov.type === "income" ? "income" : "expense";
-    const safeName = String(mov.category || "").trim();
-    const category = categoryMap.get(`${safeType}:${safeName}`.toLowerCase());
-    return {
+    const categoryRef = String(mov.category || "").trim();
+    if(!categoryRef) continue;
+    const categoryId = await resolveOrCreateCategoryId(session, categoryRef, safeType);
+    mappedPayload.push({
       date: mov.date,
       amount: Number(mov.amount) || 0,
       type: safeType,
-      category: category?.id,
-      group_snapshot: mov.group || category?.group?.name || "",
+      category: categoryId,
+      group_snapshot: mov.group || "",
       note: mov.note || mov.notes || mov.desc || "",
       source,
       imported_batch_id: safeBatchId
-    };
-  });
+    });
+  }
 
-  const invalidCategoryRow = mappedPayload.find(item => !isUuid(item.category));
+  const invalidCategoryRow = mappedPayload.find(item => !isUUID(item.category));
   if(invalidCategoryRow){
     throw new Error("Importación inválida: se detectaron categorías sin UUID válido.");
   }

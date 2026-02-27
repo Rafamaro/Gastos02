@@ -34,10 +34,20 @@ async function requestJson(url, options = {}, fallbackMessage = "No se pudo comp
   try{ payload = await response.json(); }catch(_err){ payload = null; }
 
   if(!response.ok){
+    const method = String(options?.method || "GET").toUpperCase();
     const msg = extractErrorMessage(payload) || `${fallbackMessage} (HTTP ${response.status})`;
+    console.error("[Directus] Request failed", {
+      status: response.status,
+      method,
+      url,
+      message: extractErrorMessage(payload) || "",
+      payload
+    });
     const err = makeError(msg, fallbackMessage);
     err.status = response.status;
     err.payload = payload;
+    err.method = method;
+    err.url = url;
     throw err;
   }
 
