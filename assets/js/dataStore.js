@@ -26,6 +26,26 @@ function isUuid(value){
 }
 
 
+function getIdFromDirectusResponse(res){
+  if(res?.id) return res.id;
+  if(res?.data?.id) return res.data.id;
+  if(Array.isArray(res) && res[0]?.id) return res[0].id;
+  if(Array.isArray(res?.data) && res.data[0]?.id) return res.data[0].id;
+  if(res?.data?.data?.id) return res.data.data.id;
+  if(Array.isArray(res?.data?.data) && res.data.data[0]?.id) return res.data.data[0].id;
+  return null;
+}
+
+function buildDirectusDebugInfo(errorOrNull, responseOrNull){
+  const out = {};
+  if(errorOrNull){
+    out.status = errorOrNull?.status || null;
+    out.body = errorOrNull?.payload || errorOrNull?.message || null;
+  }
+  if(responseOrNull !== undefined) out.response = responseOrNull ?? null;
+  return out;
+}
+
 async function getDirectusSession(){
   try{
     const session = await ensureDirectusClientSession();
@@ -40,16 +60,71 @@ function directusArgs(session){
 }
 
 async function resolveCategoryIdByName(session, categoryName, type = "expense"){
+  const safeType = type === "income" ? "income" : "expense";
   const list = await listItems({
     ...directusArgs(session),
     collection: COLLECTIONS.categories,
     query: {
       limit: 1,
-      filter: { name: { _eq: String(categoryName || "").trim() }, type: { _eq: type === "income" ? "income" : "expense" } },
+      filter: { name: { _eq: String(categoryName || "").trim() }, type: { _eq: safeType } },
       fields: ["id"]
     }
   });
-  return list[0]?.id || null;
+  const id = getIdFromDirectusResponse(list);
+  return isUUID(id) ? id : null;
+}
+
+async function resolveOrCreateCategoryId(session, categoryRef, type = "expense"){
+  const safeType = type === "income" ? "income" : "expense";
+  if(isUUID(categoryRef)) return String(categoryRef).trim();
+
+  const name = String(categoryRef || "").trim();
+  if(!name) return null;
+
+  const firstLookup = await listItems({
+    ...directusArgs(session),
+    collection: COLLECTIONS.categories,
+    query: {
+      limit: 1,
+      filter: { name: { _eq: name }, type: { _eq: safeType } },
+      fields: ["id"]
+    }
+  });
+  const firstId = getIdFromDirectusResponse(firstLookup);
+  if(isUUID(firstId)) return firstId;
+
+  let postRes = null;
+  let postErr = null;
+  try{
+    postRes = await createItem({
+      ...directusArgs(session),
+      collection: COLLECTIONS.categories,
+      data: { name, type: safeType, group: null, is_active: true }
+    });
+    const postId = getIdFromDirectusResponse(postRes);
+    if(isUUID(postId)) return postId;
+  }catch(err){
+    postErr = err;
+  }
+
+  const secondLookup = await listItems({
+    ...directusArgs(session),
+    collection: COLLECTIONS.categories,
+    query: {
+      limit: 1,
+      filter: { name: { _eq: name }, type: { _eq: safeType } },
+      fields: ["id"]
+    }
+  });
+  const secondId = getIdFromDirectusResponse(secondLookup);
+  if(isUUID(secondId)) return secondId;
+
+  const debugInfo = {
+    post: buildDirectusDebugInfo(postErr, postRes),
+    firstLookup,
+    secondLookup
+  };
+  throw new Error(`No se pudo resolver/crear la categoría '${name}' (${safeType}) en Directus. Debug: ${JSON.stringify(debugInfo)}`);
 }
 
 async function resolveOrCreateCategoryId(session, categoryRef, type = "expense"){
