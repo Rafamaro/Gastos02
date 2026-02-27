@@ -1,5 +1,5 @@
 import { el, fillSelect, fmtMoney, toBase, safeTags, normalizeTx, sortTx, todayISO, monthISO, toast, escapeHTML } from "./utils.js";
-import { createTransaction, updateTransaction, deleteTransaction, listCategories } from "./dataStore.js?v=1772015862292";
+import { createTransaction, updateTransaction, deleteTransaction, listCategories, listTransactions, listBudgets, syncBudgetMapFromRows } from "./dataStore.js?v=1772015862292";
 export function initIngreso(state){
   // listeners de refresco externo
   state.bus.on("config:changed", async ()=> {
@@ -28,6 +28,23 @@ export function initIngreso(state){
   ["qSearch","qType","qCategory","qFrom","qTo"].forEach(id=>{
     el(id).addEventListener("input", ()=>{ state.page=1; renderList(state); });
     el(id).addEventListener("change", ()=>{ state.page=1; renderList(state); });
+  });
+
+  el("tbody").addEventListener("click", (ev)=>{
+    const editBtn = ev.target.closest(".btn-edit");
+    if(editBtn){
+      const txId = editBtn.dataset.id;
+      if(txId) openEdit(state, txId).catch(err => toast(err?.userMessage || err?.message || "No se pudo abrir edición.", "danger"));
+      return;
+    }
+
+    const delBtn = ev.target.closest(".btn-delete");
+    if(delBtn){
+      const txId = delBtn.dataset.id;
+      if(!txId) return;
+      el("eId").value = txId;
+      deleteEdit(state).catch(err => toast(err?.userMessage || err?.message || "No se pudo eliminar.", "danger"));
+    }
   });
 
   // quick
@@ -201,6 +218,18 @@ export function clearForm(state){
   toast("Formulario limpio");
 }
 
+async function reloadFromDirectusAndRender(state){
+  if(!state.directus?.connected) return;
+  state.tx = await listTransactions();
+  state.budgetRows = await listBudgets();
+  state.budgets = syncBudgetMapFromRows(state.budgetRows);
+  await refreshCategorySelects(state);
+  renderList(state);
+  state.bus.emit("tx:changed");
+  state.bus.emit("dashboard:refresh");
+  state.bus.emit("budgets:changed");
+}
+
 export async function addTx(state){
   const config = state.config;
   const amount = Number(el("fAmount").value);
@@ -230,16 +259,22 @@ export async function addTx(state){
     notes: el("fNotes").value.trim(),
   }, config);
 
-  const saved = await createTransaction({ ...x, categoryId: selectedCategoryId });
-  state.tx.unshift({ ...x, id: saved?.id || x.id });
+  try{
+    const saved = await createTransaction({ ...x, categoryId: selectedCategoryId });
+    state.tx.unshift({ ...x, id: saved?.id || x.id });
 
-  toast("Guardado ✅");
-  clearForm(state);
-  state.page = 1;
-  renderList(state);
-
-  state.bus.emit("tx:changed");
-  state.bus.emit("dashboard:refresh");
+    toast("Guardado ✅");
+    clearForm(state);
+    state.page = 1;
+    await reloadFromDirectusAndRender(state);
+    if(!state.directus?.connected){
+      renderList(state);
+      state.bus.emit("tx:changed");
+      state.bus.emit("dashboard:refresh");
+    }
+  }catch(err){
+    toast(err?.userMessage || err?.message || "No se pudo guardar el movimiento.", "danger");
+  }
 }
 
 export function getFiltered(state){
@@ -295,10 +330,6 @@ export function renderList(state){
   el("btnPrevPage").disabled = state.page <= 1;
   el("btnNextPage").disabled = state.page >= maxPage;
 
-  view.forEach(x=>{
-    const b = document.querySelector(`[data-edit="${x.id}"]`);
-    if(b) b.addEventListener("click", ()=> openEdit(state, x.id));
-  });
 }
 
 function rowHTML(x, config){
@@ -333,7 +364,8 @@ function rowHTML(x, config){
       </td>
       <td style="white-space:nowrap">${money}</td>
       <td style="text-align:right">
-        <button class="btn small" data-edit="${x.id}">Editar</button>
+        <button class="btn small btn-edit" data-id="${x.id}">Editar</button>
+        <button class="btn small btn-delete" data-id="${x.id}">Borrar</button>
       </td>
     </tr>
   `;
@@ -400,15 +432,21 @@ export async function saveEdit(state){
     notes: el("eNotes").value.trim(),
   }, config);
 
-  await updateTransaction(idv, { ...updated, categoryId: selectedEditCategoryId });
-  state.tx[idx] = updated;
-  el("dlgEdit").close();
+  try{
+    await updateTransaction(idv, { ...updated, categoryId: selectedEditCategoryId });
+    state.tx[idx] = updated;
+    el("dlgEdit").close();
 
-  toast("Cambios guardados ✅");
-  renderList(state);
-
-  state.bus.emit("tx:changed");
-  state.bus.emit("dashboard:refresh");
+    toast("Cambios guardados ✅");
+    await reloadFromDirectusAndRender(state);
+    if(!state.directus?.connected){
+      renderList(state);
+      state.bus.emit("tx:changed");
+      state.bus.emit("dashboard:refresh");
+    }
+  }catch(err){
+    toast(err?.userMessage || err?.message || "No se pudo editar el movimiento.", "danger");
+  }
 }
 
 export async function deleteEdit(state){
@@ -418,13 +456,19 @@ export async function deleteEdit(state){
 
   if(!confirm("¿Eliminar este movimiento?")) return;
 
-  await deleteTransaction(idv);
-  state.tx = state.tx.filter(e => e.id !== idv);
-  el("dlgEdit").close();
+  try{
+    await deleteTransaction(idv);
+    state.tx = state.tx.filter(e => e.id !== idv);
+    el("dlgEdit").close();
 
-  toast("Eliminado", "warn");
-  renderList(state);
-
-  state.bus.emit("tx:changed");
-  state.bus.emit("dashboard:refresh");
+    toast("Eliminado", "warn");
+    await reloadFromDirectusAndRender(state);
+    if(!state.directus?.connected){
+      renderList(state);
+      state.bus.emit("tx:changed");
+      state.bus.emit("dashboard:refresh");
+    }
+  }catch(err){
+    toast(err?.userMessage || err?.message || "No se pudo borrar el movimiento.", "danger");
+  }
 }

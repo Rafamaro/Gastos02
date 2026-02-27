@@ -1,4 +1,4 @@
-export const APP_VERSION = "1.42";
+export const APP_VERSION = "1.43";
 // Constantes y defaults (v2)
 export const LS = {
   TX: "mov_tx_v2",
@@ -23,6 +23,9 @@ export const defaults = {
   ],
   incomeCategories: [
     "Salario", "Honorarios", "Reembolso", "Reintegro", "Inversiones", "Ventas", "Otros ingresos"
+  ],
+  reentryCategories: [
+    "Reintegro", "Devoluciones", "Reembolso de gasto"
   ],
   reentryCategories: [
     "Reintegro", "Devoluciones", "Reembolso de gasto"

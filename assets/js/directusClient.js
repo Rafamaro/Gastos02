@@ -22,6 +22,17 @@ function extractErrorMessage(payload){
   return payload.message || payload.error || "";
 }
 
+
+function isDebugEnabled(){
+  try{
+    if(globalThis?.DEBUG === true) return true;
+    const flag = String(localStorage.getItem("DEBUG") || "").trim().toLowerCase();
+    return flag === "1" || flag === "true";
+  }catch(_err){
+    return false;
+  }
+}
+
 async function requestJson(url, options = {}, fallbackMessage = "No se pudo completar la operación con Directus"){
   let response;
   try{
@@ -32,6 +43,11 @@ async function requestJson(url, options = {}, fallbackMessage = "No se pudo comp
 
   let payload = null;
   try{ payload = await response.json(); }catch(_err){ payload = null; }
+
+  const method = String(options?.method || "GET").toUpperCase();
+  if(isDebugEnabled()){
+    console.info("[Directus][DEBUG]", { method, url, status: response.status });
+  }
 
   if(!response.ok){
     const method = String(options?.method || "GET").toUpperCase();

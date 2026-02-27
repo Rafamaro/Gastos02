@@ -403,6 +403,129 @@ export async function listTransactions(){
   return loadTransactions(loadConfig());
 }
 
+export async function updateMovement(session, id, patch = {}){
+  if(!session?.access_token) throw new Error("Sesión Directus inválida para editar movimiento.");
+  if(!id) throw new Error("ID de movimiento inválido.");
+  return updateItem({
+    ...directusArgs(session),
+    collection: COLLECTIONS.movements,
+    id,
+    data: patch
+  });
+}
+
+export async function deleteMovement(session, id){
+  if(!session?.access_token) throw new Error("Sesión Directus inválida para borrar movimiento.");
+  if(!id) throw new Error("ID de movimiento inválido.");
+  return deleteItem({
+    ...directusArgs(session),
+    collection: COLLECTIONS.movements,
+    id
+  });
+}
+
+function buildLegacyCategoryMap(json = {}){
+  const map = new Map();
+  const raw = json?.categories;
+  if(Array.isArray(raw)){
+    raw.forEach((item, idx) => {
+      if(typeof item === "string") map.set(String(idx), item.trim());
+      else if(item && typeof item === "object"){
+        const id = item.id ?? item.value ?? item.key ?? idx;
+        const name = item.name ?? item.label ?? item.title ?? "";
+        if(String(name || "").trim()) map.set(String(id), String(name).trim());
+      }
+    });
+  }else if(raw && typeof raw === "object"){
+    Object.entries(raw).forEach(([id, value]) => {
+      if(typeof value === "string") map.set(String(id), value.trim());
+      else if(value?.name) map.set(String(id), String(value.name).trim());
+    });
+  }
+  return map;
+}
+
+function resolveLegacyCategoryName(value, legacyMap){
+  if(typeof value === "number") return legacyMap.get(String(value)) || String(value);
+  const raw = String(value || "").trim();
+  if(/^\d+$/.test(raw) && legacyMap.has(raw)) return legacyMap.get(raw) || raw;
+  return raw;
+}
+
+export async function importLegacyJsonToDirectus(session, json = {}, { onProgress } = {}){
+  if(!session?.access_token) throw new Error("Importación requiere sesión Directus activa.");
+
+  const parsed = json && typeof json === "object" ? json : {};
+  const legacyMap = buildLegacyCategoryMap(parsed);
+  const txList = Array.isArray(parsed.transactions)
+    ? parsed.transactions
+    : Array.isArray(parsed.expenses)
+      ? parsed.expenses.map(x => ({ ...x, type: "expense" }))
+      : [];
+
+  if(!txList.length) throw new Error("El archivo no tiene movimientos válidos para importar.");
+
+  const month = txList[0]?.date ? String(txList[0].date).slice(0, 7) : "";
+  const safeBatchId = String(parsed.imported_batch_id || `${month}:${txList.length}`).trim();
+  if(!safeBatchId) throw new Error("imported_batch_id inválido");
+
+  const existing = await listItems({
+    ...directusArgs(session),
+    collection: COLLECTIONS.movements,
+    query: { fields: ["id"], limit: 1, filter: { imported_batch_id: { _eq: safeBatchId } } }
+  });
+  if(existing.length){
+    return { skipped: true, reason: "batch_exists", imported_batch_id: safeBatchId, inserted: 0 };
+  }
+
+  const movements = txList.map((mov) => ({
+    date: mov.date,
+    amount: Number(mov.amount) || 0,
+    type: mov.type,
+    category: resolveLegacyCategoryName(mov.category, legacyMap),
+    group: mov.group || "",
+    note: mov.note || mov.notes || mov.desc || ""
+  })).filter(m => m.date && m.category);
+
+  let inserted = 0;
+  for(let idx = 0; idx < movements.length; idx++){
+    const mov = movements[idx];
+    if(typeof onProgress === "function") onProgress({ current: idx + 1, total: movements.length });
+    const safeType = mov.type === "income" || mov.type === "reentry" ? "income" : "expense";
+    const categoryId = await resolveOrCreateCategoryId(session, mov.category, safeType);
+    if(!isValidId(categoryId)) throw new Error(`Categoría inválida durante import: ${mov.category}`);
+
+    await createItem({
+      ...directusArgs(session),
+      collection: COLLECTIONS.movements,
+      data: {
+        date: mov.date,
+        amount: Number(mov.amount) || 0,
+        type: safeType,
+        category: categoryId,
+        note: mov.note || "",
+        source: "json",
+        group_snapshot: mov.group || "",
+        imported_batch_id: safeBatchId
+      }
+    });
+    inserted += 1;
+  }
+
+  await createItem({
+    ...directusArgs(session),
+    collection: COLLECTIONS.importsLog,
+    data: {
+      month: month || "",
+      source: "json",
+      status: "ok",
+      summary: { received: txList.length, inserted, imported_batch_id: safeBatchId }
+    }
+  });
+
+  return { skipped: false, imported_batch_id: safeBatchId, inserted };
+}
+
 export async function createTransaction(payload){
   const session = await getDirectusSession();
   if(session){
@@ -454,7 +577,7 @@ export async function updateTransaction(id, payload){
     }
     delete data.categoryId;
     if(payload?.notes || payload?.desc) data.note = payload.notes || payload.desc;
-    return updateItem({ ...directusArgs(session), collection: COLLECTIONS.movements, id, data });
+    return updateMovement(session, id, data);
   }
   const cfg = loadConfig();
   const tx = loadTransactions(cfg);
@@ -469,7 +592,7 @@ export async function updateTransaction(id, payload){
 
 export async function deleteTransaction(id){
   const session = await getDirectusSession();
-  if(session) return deleteItem({ ...directusArgs(session), collection: COLLECTIONS.movements, id });
+  if(session) return deleteMovement(session, id);
   const cfg = loadConfig();
   const tx = loadTransactions(cfg).filter(x => x.id !== id);
   saveTransactions(tx);
@@ -572,7 +695,7 @@ export function syncBudgetMapFromRows(rows){
   return budgetRowsToLocal(rows);
 }
 
-export async function importMonthlyJson({ batchId, month, movements = [], source = "json" } = {}){
+export async function importMonthlyJson({ batchId, month, movements = [], source = "json", onProgress } = {}){
   const session = await getDirectusSession();
   if(!session) throw new Error("Import JSON requiere sesión activa en Directus");
 
@@ -613,19 +736,39 @@ export async function importMonthlyJson({ batchId, month, movements = [], source
 
   const payload = mappedPayload.filter(x => x.category && x.date);
 
-  const inserted = payload.length ? await createItems({ ...directusArgs(session), collection: COLLECTIONS.movements, data: payload }) : [];
-  await createItem({
-    ...directusArgs(session),
-    collection: COLLECTIONS.importsLog,
-    data: {
-      month: month || "",
-      source,
-      status: "ok",
-      summary: { received: movements.length, inserted: inserted.length, imported_batch_id: safeBatchId }
+  let inserted = 0;
+  try{
+    for(let idx = 0; idx < payload.length; idx++){
+      if(typeof onProgress === "function") onProgress({ current: idx + 1, total: payload.length });
+      await createItem({ ...directusArgs(session), collection: COLLECTIONS.movements, data: payload[idx] });
+      inserted += 1;
     }
-  });
 
-  return { skipped: false, imported_batch_id: safeBatchId, inserted: inserted.length };
+    await createItem({
+      ...directusArgs(session),
+      collection: COLLECTIONS.importsLog,
+      data: {
+        month: month || "",
+        source,
+        status: "ok",
+        summary: { received: movements.length, inserted, imported_batch_id: safeBatchId }
+      }
+    });
+
+    return { skipped: false, imported_batch_id: safeBatchId, inserted };
+  }catch(err){
+    await createItem({
+      ...directusArgs(session),
+      collection: COLLECTIONS.importsLog,
+      data: {
+        month: month || "",
+        source,
+        status: "error",
+        summary: { received: movements.length, inserted, imported_batch_id: safeBatchId, error: err?.message || "Import falló" }
+      }
+    });
+    throw err;
+  }
 }
 
 export async function ensureDirectusSession(){

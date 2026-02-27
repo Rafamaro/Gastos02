@@ -1,6 +1,6 @@
 import { el, toast, downloadBlob, toBase } from "./utils.js";
 import { saveTransactions, saveConfig, saveBudgets, getTheme, setTheme } from "./storage.js";
-import { importMonthlyJson } from "./dataStore.js";
+import { importMonthlyJson, importLegacyJsonToDirectus, listTransactions, listBudgets, syncBudgetMapFromRows } from "./dataStore.js";
 
 export function initExport(state){
   // theme
@@ -38,7 +38,7 @@ export function importJSON(state, ev){
   if(!file) return;
 
   const reader = new FileReader();
-  reader.onload = () => {
+  reader.onload = async () => {
     try{
       const parsed = JSON.parse(String(reader.result || "{}"));
       if(!parsed || typeof parsed !== "object"){
@@ -61,29 +61,49 @@ export function importJSON(state, ev){
       const month = state.tx?.[0]?.date ? String(state.tx[0].date).slice(0, 7) : "";
       const imported_batch_id = String(parsed.imported_batch_id || `${month}:${state.tx.length}`).trim();
 
-      importMonthlyJson({
-        batchId: imported_batch_id,
-        month,
-        movements: state.tx.map((mov)=> ({
-          date: mov.date,
-          amount: mov.amount,
-          type: mov.type,
-          category: mov.category,
-          group: mov.group || "",
-          note: mov.notes || mov.desc || ""
-        })),
-        source: "json"
-      }).catch(()=> null);
+      if(state.directus?.connected){
+        toast("Importando 0/0…", "warn");
+        await importLegacyJsonToDirectus(state.directus, parsed, {
+          onProgress: ({ current, total }) => {
+            toast(`Importando ${current}/${total}…`, "warn");
+          }
+        });
 
-      saveTransactions(state.tx);
-      saveConfig(state.config);
-      saveBudgets(state.budgets);
+        state.tx = await listTransactions();
+        state.budgetRows = await listBudgets();
+        state.budgets = syncBudgetMapFromRows(state.budgetRows);
+        state.bus.emit("tx:changed");
+        state.bus.emit("dashboard:refresh");
+        state.bus.emit("budgets:changed");
+        state.bus.emit("ingreso:refresh");
+        state.bus.emit("config:changed");
+        toast("Importación a Directus lista ✅");
+      }else{
+        await importMonthlyJson({
+          batchId: imported_batch_id,
+          month,
+          movements: state.tx.map((mov)=> ({
+            date: mov.date,
+            amount: mov.amount,
+            type: mov.type,
+            category: mov.category,
+            group: mov.group || "",
+            note: mov.notes || mov.desc || ""
+          })),
+          source: "json",
+          onProgress: ({ current, total }) => toast(`Importando ${current}/${total}…`, "warn")
+        });
 
-      toast("Importado ✅ (recargando…)", "warn");
-      setTimeout(()=> location.reload(), 600);
+        saveTransactions(state.tx);
+        saveConfig(state.config);
+        saveBudgets(state.budgets);
+
+        toast("Importado ✅ (recargando…)", "warn");
+        setTimeout(()=> location.reload(), 600);
+      }
     }catch(err){
       console.error("Error importando JSON", err);
-      toast("Archivo inválido o corrupto.", "danger");
+      toast(err?.userMessage || err?.message || "Archivo inválido o corrupto.", "danger");
     }finally{
       ev.target.value = "";
     }
