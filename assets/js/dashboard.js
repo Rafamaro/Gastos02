@@ -1,7 +1,7 @@
 import { el, fmtMoney, toBase, groupSum, topEntry, escapeHTML } from "./utils.js";
 import { getFiltered } from "./ingreso.js";
 
-const REENTRY_TRANSFER_SOURCE = "Reingreso por transferencia";
+const REENTRY_TRANSFER_SOURCES = ["Reingreso por transferencia", "Reintegro"];
 const GROUP_BUDGET_PREFIX = "__group__::";
 
 function groupBudgetKey(group){
@@ -9,7 +9,9 @@ function groupBudgetKey(group){
 }
 
 function isReentryTransfer(tx){
-  return tx.type === "income" && tx.pay === REENTRY_TRANSFER_SOURCE;
+  if(tx.type !== "income") return false;
+  const pay = String(tx.pay || "").trim().toLowerCase();
+  return REENTRY_TRANSFER_SOURCES.some(label => pay === String(label).toLowerCase());
 }
 
 function expenseKeyFromAgg(tx, config, aggMode){
