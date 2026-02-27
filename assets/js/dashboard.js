@@ -1,7 +1,11 @@
 import { el, fmtMoney, toBase, groupSum, topEntry, escapeHTML } from "./utils.js";
 import { getFiltered } from "./ingreso.js";
 
-const REENTRY_TRANSFER_SOURCE = "Reingreso por transferencia";
+const REENTRY_TRANSFER_SOURCES = ["Reingreso por transferencia", "Reintegro"];
+
+function isRegularIncome(tx){
+  return tx.type === "income" && !isReentryTransfer(tx);
+}
 const GROUP_BUDGET_PREFIX = "__group__::";
 
 function groupBudgetKey(group){
@@ -9,7 +13,9 @@ function groupBudgetKey(group){
 }
 
 function isReentryTransfer(tx){
-  return tx.type === "income" && tx.pay === REENTRY_TRANSFER_SOURCE;
+  if(tx.type !== "income") return false;
+  const pay = String(tx.pay || "").trim().toLowerCase();
+  return REENTRY_TRANSFER_SOURCES.some(label => pay === String(label).toLowerCase());
 }
 
 function expenseKeyFromAgg(tx, config, aggMode){
@@ -60,7 +66,7 @@ export function refreshDash(state){
   const incomes = nlist.filter(x=>x.type==="income");
   const expenses = nlist.filter(x=>x.type==="expense");
   const reentryTransfers = incomes.filter(isReentryTransfer);
-  const regularIncomes = incomes.filter(x=>!isReentryTransfer(x));
+  const regularIncomes = incomes.filter(isRegularIncome);
 
   const incTotal = regularIncomes.reduce((s,x)=> s + toBase(x.amount, x.currency, config), 0);
   const reentryTotal = reentryTransfers.reduce((s,x)=> s + toBase(x.amount, x.currency, config), 0);
@@ -73,6 +79,7 @@ export function refreshDash(state){
   const expenseAgg = el("dashAgg").value;
   const byCatExpense = groupSum(expenses, x=>expenseKeyFromAgg(x, config, expenseAgg), x=>toBase(x.amount, x.currency, config));
   const byCatIncome = groupSum(regularIncomes, x=>x.category, x=>toBase(x.amount, x.currency, config));
+  const byCatReentry = groupSum(reentryTransfers, x=>x.category, x=>toBase(x.amount, x.currency, config));
   const byPay = groupSum(nlist, x=>x.pay, x=>toBase(x.amount, x.currency, config));
 
   const topExp = topEntry(byCatExpense);
@@ -101,7 +108,7 @@ export function refreshDash(state){
     </div>
   `;
 
-  renderCharts(state, nlist, month, byCatExpense, byCatIncome, byPay);
+  renderCharts(state, nlist, month, byCatExpense, byCatIncome, byCatReentry, byPay);
   renderBudgetStatus(state, expenses, month, expenseAgg);
   renderCategoryTable(state, expenses, byCatExpense, month, expenseAgg);
 }
@@ -109,7 +116,7 @@ export function refreshDash(state){
 // -----------------------------
 // Charts
 // -----------------------------
-function renderCharts(state, list, month, byCatExpense, byCatIncome, byPay){
+function renderCharts(state, list, month, byCatExpense, byCatIncome, byCatReentry, byPay){
   const config = state.config;
   const hasChart = typeof Chart !== "undefined";
 
@@ -131,7 +138,7 @@ function renderCharts(state, list, month, byCatExpense, byCatIncome, byPay){
     const d = Number(String(x.date).slice(8,10));
     if(d>=1 && d<=daysInMonth){
       const base = toBase(x.amount, x.currency, config);
-      if(x.type==="income" && !isReentryTransfer(x)) incByDay[d-1] += base;
+      if(isRegularIncome(x)) incByDay[d-1] += base;
       else if(x.type==="expense") expByDay[d-1] += base;
       else if(isReentryTransfer(x)) expByDay[d-1] -= base;
     }
@@ -232,13 +239,14 @@ function renderCharts(state, list, month, byCatExpense, byCatIncome, byPay){
   });
 
   const mode = el("dashCatsMode").value;
-  const byCat = mode==="income" ? byCatIncome : byCatExpense;
+  const byCat = mode==="income" ? byCatIncome : mode==="reentry" ? byCatReentry : byCatExpense;
   if(mode==="income") el("hCats").textContent = "Ingresos por categoría";
+  else if(mode==="reentry") el("hCats").textContent = "Reintegros por categoría";
   else el("hCats").textContent = el("dashAgg").value === "group" ? "Gastos por grupo" : "Gastos por categoría";
 
   const catLabels = byCat.slice(0,10).map(x=>x.key);
   const catVals = byCat.slice(0,10).map(x=>Number(x.value.toFixed(2)));
-  const catPalette = buildPalette(catVals.length, mode === "income" ? "income" : "expense");
+  const catPalette = buildPalette(catVals.length, mode === "income" || mode === "reentry" ? "income" : "expense");
 
   state.charts.cats = new Chart(el("chartCats"), {
     type: "doughnut",
@@ -341,7 +349,7 @@ function buildMonthlyComparisonMetrics(txList, config, month, monthsBack){
     const txMonth = String(tx.date || "").slice(0, 7);
     if(!totals.has(txMonth)) continue;
     const amountBase = toBase(Number(tx.amount) || 0, tx.currency, config);
-    if(tx.type === "income" && !isReentryTransfer(tx)) totals.get(txMonth).income += amountBase;
+    if(isRegularIncome(tx)) totals.get(txMonth).income += amountBase;
     if(tx.type === "expense") totals.get(txMonth).expense += amountBase;
   }
 
