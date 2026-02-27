@@ -59,15 +59,15 @@ export function safeTags(str){
 }
 
 export function normalizeTx(x, config){
-  const type = (x.type==="income" || x.type==="expense") ? x.type : "expense";
+  const type = (x.type==="income" || x.type==="expense" || x.type==="reentry") ? x.type : "expense";
   return {
     id: x.id || id(),
     type,
     date: x.date || todayISO(),
     amount: Number(x.amount) || 0,
     currency: x.currency || config.baseCurrency,
-    category: x.category || (type==="income" ? "Otros ingresos" : "Otros"),
-    pay: x.pay || (type==="income" ? "Transferencia" : "Tarjeta"),
+    category: x.category || (type==="income" ? "Otros ingresos" : type==="reentry" ? "Reintegro" : "Otros"),
+    pay: x.pay || (type==="expense" ? "Tarjeta" : type==="reentry" ? "Reintegro" : "Transferencia"),
     vendor: x.vendor || "",
     desc: x.desc || "",
     tags: Array.isArray(x.tags) ? x.tags : safeTags(x.tags),
@@ -79,7 +79,10 @@ export function sortTx(list){
   return list.slice().sort((a,b)=>{
     if(a.date === b.date){
       // ingreso primero si mismo día; luego monto desc
-      if(a.type !== b.type) return a.type==="income" ? -1 : 1;
+      if(a.type !== b.type){
+        const rank = { income: 0, reentry: 1, expense: 2 };
+        return (rank[a.type] ?? 9) - (rank[b.type] ?? 9);
+      }
       return (b.amount||0) - (a.amount||0);
     }
     return a.date < b.date ? 1 : -1;
