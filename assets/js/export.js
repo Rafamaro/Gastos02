@@ -1,6 +1,6 @@
 import { el, toast, downloadBlob, toBase } from "./utils.js";
 import { saveTransactions, saveConfig, saveBudgets, getTheme, setTheme } from "./storage.js";
-import { importMonthlyJson } from "./dataStore.js";
+import { importMonthlyJson, importLegacyJsonToDirectus, listTransactions, listBudgets, syncBudgetMapFromRows } from "./dataStore.js";
 
 export function initExport(state){
   // theme
@@ -12,14 +12,14 @@ export function initExport(state){
   });
 
   // export/import/reset/csv
-  el("btnExport").addEventListener("click", ()=> exportJSON(state));
+  el("btnExport").addEventListener("click", async ()=> exportJSON(state));
   el("fileImport").addEventListener("change", (ev)=> importJSON(state, ev));
   el("btnWipe").addEventListener("click", ()=> wipeAll());
 
-  el("btnCSV").addEventListener("click", ()=> exportCSV(state));
+  el("btnCSV").addEventListener("click", async ()=> exportCSV(state));
 }
 
-export function exportJSON(state){
+export async function exportJSON(state){
   const payload = {
     version: 2,
     exportedAt: new Date().toISOString(),
@@ -27,8 +27,10 @@ export function exportJSON(state){
     budgets: state.budgets,
     transactions: state.tx
   };
-  downloadBlob(JSON.stringify(payload, null, 2), `movimientos_export_${Date.now()}.json`, "application/json");
-  toast("Exportado ✅");
+  const ok = await downloadBlob(JSON.stringify(payload, null, 2), `movimientos_export_${Date.now()}.json`, "application/json", {
+    pickerTypes: [{ description: "JSON", accept: { "application/json": [".json"] } }]
+  });
+  if(ok) toast("Exportado ✅");
 }
 
 export function importJSON(state, ev){
@@ -36,7 +38,7 @@ export function importJSON(state, ev){
   if(!file) return;
 
   const reader = new FileReader();
-  reader.onload = () => {
+  reader.onload = async () => {
     try{
       const parsed = JSON.parse(String(reader.result || "{}"));
       if(!parsed || typeof parsed !== "object"){
@@ -59,29 +61,49 @@ export function importJSON(state, ev){
       const month = state.tx?.[0]?.date ? String(state.tx[0].date).slice(0, 7) : "";
       const imported_batch_id = String(parsed.imported_batch_id || `${month}:${state.tx.length}`).trim();
 
-      importMonthlyJson({
-        batchId: imported_batch_id,
-        month,
-        movements: state.tx.map((mov)=> ({
-          date: mov.date,
-          amount: mov.amount,
-          type: mov.type,
-          category: mov.category,
-          group: mov.group || "",
-          note: mov.notes || mov.desc || ""
-        })),
-        source: "json"
-      }).catch(()=> null);
+      if(state.directus?.connected){
+        toast("Importando 0/0…", "warn");
+        await importLegacyJsonToDirectus(state.directus, parsed, {
+          onProgress: ({ current, total }) => {
+            toast(`Importando ${current}/${total}…`, "warn");
+          }
+        });
 
-      saveTransactions(state.tx);
-      saveConfig(state.config);
-      saveBudgets(state.budgets);
+        state.tx = await listTransactions();
+        state.budgetRows = await listBudgets();
+        state.budgets = syncBudgetMapFromRows(state.budgetRows);
+        state.bus.emit("tx:changed");
+        state.bus.emit("dashboard:refresh");
+        state.bus.emit("budgets:changed");
+        state.bus.emit("ingreso:refresh");
+        state.bus.emit("config:changed");
+        toast("Importación a Directus lista ✅");
+      }else{
+        await importMonthlyJson({
+          batchId: imported_batch_id,
+          month,
+          movements: state.tx.map((mov)=> ({
+            date: mov.date,
+            amount: mov.amount,
+            type: mov.type,
+            category: mov.category,
+            group: mov.group || "",
+            note: mov.notes || mov.desc || ""
+          })),
+          source: "json",
+          onProgress: ({ current, total }) => toast(`Importando ${current}/${total}…`, "warn")
+        });
 
-      toast("Importado ✅ (recargando…)", "warn");
-      setTimeout(()=> location.reload(), 600);
+        saveTransactions(state.tx);
+        saveConfig(state.config);
+        saveBudgets(state.budgets);
+
+        toast("Importado ✅ (recargando…)", "warn");
+        setTimeout(()=> location.reload(), 600);
+      }
     }catch(err){
       console.error("Error importando JSON", err);
-      toast("Archivo inválido o corrupto.", "danger");
+      toast(err?.userMessage || err?.message || "Archivo inválido o corrupto.", "danger");
     }finally{
       ev.target.value = "";
     }
@@ -89,7 +111,7 @@ export function importJSON(state, ev){
   reader.readAsText(file);
 }
 
-export function exportCSV(state){
+export async function exportCSV(state){
   const config = state.config;
   const list = state.tx.slice().sort((a,b)=> (a.date < b.date ? 1 : -1));
 
@@ -121,8 +143,10 @@ export function exportCSV(state){
     return needs ? `"${esc}"` : esc;
   }).join(",")).join("\n");
 
-  downloadBlob(csv, `movimientos_${Date.now()}.csv`, "text/csv");
-  toast("CSV exportado ✅");
+  const ok = await downloadBlob(csv, `movimientos_${Date.now()}.csv`, "text/csv", {
+    pickerTypes: [{ description: "CSV", accept: { "text/csv": [".csv"] } }]
+  });
+  if(ok) toast("CSV exportado ✅");
 }
 
 export function wipeAll(){

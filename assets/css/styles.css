@@ -261,14 +261,25 @@
     .filters{
       display:grid;
       gap:10px;
-      grid-template-columns: 1fr 1fr 1fr 1fr 1fr;
+      grid-template-columns: repeat(5, minmax(120px, 1fr));
       align-items:end;
+      padding: 10px;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      background: color-mix(in oklab, var(--card) 94%, transparent);
     }
+    .filters > div{min-width:0;}
+    .filters label{font-size:11px; letter-spacing:.2px; text-transform:uppercase; color:var(--muted);}
     @media (max-width: 980px){
       .filters{grid-template-columns:1fr 1fr}
     }
-    @media (max-width: 540px){
-      .filters{grid-template-columns:1fr}
+    @media (max-width: 640px){
+      .filters{grid-template-columns:1fr 1fr; gap:8px; padding:8px;}
+      .filters > div:first-child{grid-column:1 / -1;}
+      .filters > div input,
+      .filters > div select{font-size:13px; height:36px; padding:7px 9px;}
+      .filters > div:nth-child(4),
+      .filters > div:nth-child(5){grid-column: span 1;}
     }
 
     .table{
@@ -445,6 +456,9 @@
         flex:1 1 calc(50% - 10px);
         justify-content:center;
       }
+      .split{align-items:stretch;}
+      .recent-actions{width:100%;}
+      .recent-actions .btn{flex:1 1 calc(33.333% - 8px);}
       .dashboard-controls > *{flex: 1 1 100%;}
       .dashboard-controls .btn{justify-content:center;}
       .table th, .table td{padding: 8px 7px; font-size: 11px;}
