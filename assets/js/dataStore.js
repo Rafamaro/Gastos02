@@ -15,24 +15,30 @@ const COLLECTIONS = {
   importsLog: "imports_log"
 };
 
-const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-function isUUID(value){
-  return UUID_REGEX.test(String(value || "").trim());
+function isValidId(v){
+  if(typeof v === "number" && Number.isFinite(v)) return true;
+  const s = String(v ?? "").trim();
+  return UUID_RE.test(s) || /^\d+$/.test(s);
 }
 
-function isUuid(value){
-  return isUUID(value);
+function normalizeId(v){
+  if(typeof v === "number" && Number.isFinite(v)) return v;
+  const s = String(v ?? "").trim();
+  if(!s) return null;
+  if(UUID_RE.test(s)) return s;
+  if(/^\d+$/.test(s)) return Number(s);
+  return null;
 }
 
-
-function getIdFromDirectusResponse(res){
-  if(res?.id) return res.id;
-  if(res?.data?.id) return res.data.id;
-  if(Array.isArray(res) && res[0]?.id) return res[0].id;
-  if(Array.isArray(res?.data) && res.data[0]?.id) return res.data[0].id;
-  if(res?.data?.data?.id) return res.data.data.id;
-  if(Array.isArray(res?.data?.data) && res.data.data[0]?.id) return res.data.data[0].id;
+function extractId(res){
+  if(res && typeof res === "object" && "id" in res && isValidId(res.id)) return res.id;
+  if(res?.data && typeof res.data === "object" && "id" in res.data && isValidId(res.data.id)) return res.data.id;
+  if(Array.isArray(res) && res[0]?.id && isValidId(res[0].id)) return res[0].id;
+  if(Array.isArray(res?.data) && res.data[0]?.id && isValidId(res.data[0].id)) return res.data[0].id;
+  if(res?.data?.data?.id && isValidId(res.data.data.id)) return res.data.data.id;
+  if(Array.isArray(res?.data?.data) && res.data.data[0]?.id && isValidId(res.data.data[0].id)) return res.data.data[0].id;
   return null;
 }
 
@@ -70,15 +76,18 @@ async function resolveCategoryIdByName(session, categoryName, type = "expense"){
       fields: ["id"]
     }
   });
-  const id = getIdFromDirectusResponse(list);
-  return isUUID(id) ? id : null;
+  const id = extractId(list);
+  return isValidId(id) ? normalizeId(id) : null;
 }
 
 const resolveOrCreateCategoryId = async (session, categoryRef, type = "expense") => {
   const safeType = type === "income" ? "income" : "expense";
-  if(isUUID(categoryRef)) return String(categoryRef).trim();
 
-  const name = String(categoryRef || "").trim();
+  if(typeof categoryRef === "number" && Number.isFinite(categoryRef)) return categoryRef;
+  const directId = normalizeId(categoryRef);
+  if(directId !== null) return directId;
+
+  const name = String(categoryRef ?? "").trim();
   if(!name) return null;
 
   const firstLookup = await listItems({
@@ -90,8 +99,8 @@ const resolveOrCreateCategoryId = async (session, categoryRef, type = "expense")
       fields: ["id"]
     }
   });
-  const firstId = getIdFromDirectusResponse(firstLookup);
-  if(isUUID(firstId)) return firstId;
+  const firstId = normalizeId(extractId(firstLookup));
+  if(firstId !== null) return firstId;
 
   let postRes = null;
   let postErr = null;
@@ -101,8 +110,8 @@ const resolveOrCreateCategoryId = async (session, categoryRef, type = "expense")
       collection: COLLECTIONS.categories,
       data: { name, type: safeType, group: null, is_active: true }
     });
-    const postId = getIdFromDirectusResponse(postRes);
-    if(isUUID(postId)) return postId;
+    const postId = normalizeId(extractId(postRes));
+    if(postId !== null) return postId;
   }catch(err){
     postErr = err;
   }
@@ -116,8 +125,8 @@ const resolveOrCreateCategoryId = async (session, categoryRef, type = "expense")
       fields: ["id"]
     }
   });
-  const secondId = getIdFromDirectusResponse(secondLookup);
-  if(isUUID(secondId)) return secondId;
+  const secondId = normalizeId(extractId(secondLookup));
+  if(secondId !== null) return secondId;
 
   const debugInfo = {
     post: buildDirectusDebugInfo(postErr, postRes),
@@ -399,12 +408,12 @@ export async function createTransaction(payload){
   if(session){
     const normalized = normalizeTx(payload, loadConfig());
     const selectedCategoryValue = String(payload?.categoryId || "").trim();
-    const categoryRef = isUUID(selectedCategoryValue)
-      ? selectedCategoryValue
+    const categoryRef = isValidId(selectedCategoryValue)
+      ? normalizeId(selectedCategoryValue)
       : String(normalized.category || payload?.category || "").trim();
     const categoryId = await resolveOrCreateCategoryId(session, categoryRef, normalized.type);
 
-    if(!isUUID(categoryId)) throw new Error("No se pudo resolver la categoría del movimiento.");
+    if(!isValidId(categoryId)) throw new Error("No se pudo resolver la categoría del movimiento.");
 
     const saved = await createItem({
       ...directusArgs(session),
@@ -435,12 +444,12 @@ export async function updateTransaction(id, payload){
   if(session){
     const data = { ...payload };
     const selectedCategoryValue = String(payload?.categoryId || "").trim();
-    const categoryRef = isUUID(selectedCategoryValue)
-      ? selectedCategoryValue
+    const categoryRef = isValidId(selectedCategoryValue)
+      ? normalizeId(selectedCategoryValue)
       : String(payload?.category || "").trim();
     if(categoryRef){
       const categoryId = await resolveOrCreateCategoryId(session, categoryRef, payload?.type || "expense");
-      if(!isUUID(categoryId)) throw new Error("No se pudo resolver la categoría del movimiento.");
+      if(!isValidId(categoryId)) throw new Error("No se pudo resolver la categoría del movimiento.");
       data.category = categoryId;
     }
     delete data.categoryId;
@@ -597,9 +606,9 @@ export async function importMonthlyJson({ batchId, month, movements = [], source
     });
   }
 
-  const invalidCategoryRow = mappedPayload.find(item => !isUUID(item.category));
+  const invalidCategoryRow = mappedPayload.find(item => !isValidId(item.category));
   if(invalidCategoryRow){
-    throw new Error("Importación inválida: se detectaron categorías sin UUID válido.");
+    throw new Error("Importación inválida: se detectaron categorías sin id válido.");
   }
 
   const payload = mappedPayload.filter(x => x.category && x.date);
