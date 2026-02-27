@@ -79,6 +79,7 @@ export function refreshDash(state){
   const expenseAgg = el("dashAgg").value;
   const byCatExpense = groupSum(expenses, x=>expenseKeyFromAgg(x, config, expenseAgg), x=>toBase(x.amount, x.currency, config));
   const byCatIncome = groupSum(regularIncomes, x=>x.category, x=>toBase(x.amount, x.currency, config));
+  const byCatReentry = groupSum(reentryTransfers, x=>x.category, x=>toBase(x.amount, x.currency, config));
   const byPay = groupSum(nlist, x=>x.pay, x=>toBase(x.amount, x.currency, config));
 
   const topExp = topEntry(byCatExpense);
@@ -107,7 +108,7 @@ export function refreshDash(state){
     </div>
   `;
 
-  renderCharts(state, nlist, month, byCatExpense, byCatIncome, byPay);
+  renderCharts(state, nlist, month, byCatExpense, byCatIncome, byCatReentry, byPay);
   renderBudgetStatus(state, expenses, month, expenseAgg);
   renderCategoryTable(state, expenses, byCatExpense, month, expenseAgg);
 }
@@ -115,7 +116,7 @@ export function refreshDash(state){
 // -----------------------------
 // Charts
 // -----------------------------
-function renderCharts(state, list, month, byCatExpense, byCatIncome, byPay){
+function renderCharts(state, list, month, byCatExpense, byCatIncome, byCatReentry, byPay){
   const config = state.config;
   const hasChart = typeof Chart !== "undefined";
 
@@ -238,13 +239,14 @@ function renderCharts(state, list, month, byCatExpense, byCatIncome, byPay){
   });
 
   const mode = el("dashCatsMode").value;
-  const byCat = mode==="income" ? byCatIncome : byCatExpense;
+  const byCat = mode==="income" ? byCatIncome : mode==="reentry" ? byCatReentry : byCatExpense;
   if(mode==="income") el("hCats").textContent = "Ingresos por categoría";
+  else if(mode==="reentry") el("hCats").textContent = "Reintegros por categoría";
   else el("hCats").textContent = el("dashAgg").value === "group" ? "Gastos por grupo" : "Gastos por categoría";
 
   const catLabels = byCat.slice(0,10).map(x=>x.key);
   const catVals = byCat.slice(0,10).map(x=>Number(x.value.toFixed(2)));
-  const catPalette = buildPalette(catVals.length, mode === "income" ? "income" : "expense");
+  const catPalette = buildPalette(catVals.length, mode === "income" || mode === "reentry" ? "income" : "expense");
 
   state.charts.cats = new Chart(el("chartCats"), {
     type: "doughnut",
