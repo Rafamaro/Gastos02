@@ -356,14 +356,9 @@
             </select>
           </div>
           <div style="margin-bottom:10px">
-            <label>Categorías individuales en comparativa</label>
-            <div id="dashBreakdownCategories" style="display:grid; gap:6px; grid-template-columns: repeat(auto-fit, minmax(180px,1fr)); margin-top:6px"></div>
-            <div class="hint" style="margin-top:4px">Marcá categorías específicas para el período seleccionado.</div>
-          </div>
-          <div style="margin-bottom:10px">
-            <label>Grupos configurados en comparativa</label>
-            <div id="dashBreakdownGroups" style="display:grid; gap:6px; grid-template-columns: repeat(auto-fit, minmax(180px,1fr)); margin-top:6px"></div>
-            <div class="hint" style="margin-top:4px">Marcá grupos específicos para el período seleccionado.</div>
+            <label id="labDashBreakdownEntity">Elegir categoría/grupo para comparativa</label>
+            <select id="dashBreakdownEntity"></select>
+            <div class="hint" id="hintDashBreakdownEntity" style="margin-top:4px">Elegí una entidad para ver su comparativa en el período seleccionado.</div>
           </div>
           <canvas id="chartMonthlyBreakdown" height="140"></canvas>
           <div class="hint" id="fallbackMonthlyBreakdown" style="display:none"></div>

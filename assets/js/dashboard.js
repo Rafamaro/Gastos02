@@ -24,45 +24,45 @@ function expenseKeyFromAgg(tx, config, aggMode){
   return group || tx.category;
 }
 
-function checklistValues(containerId){
-  return [...document.querySelectorAll(`#${containerId} input[type="checkbox"]:checked`)]
-    .map(input => input.value)
-    .filter(Boolean);
+function entitiesForAgg(config, aggMode){
+  if(aggMode === "group") return (config?.expenseGroups || []).filter(Boolean);
+  return (config?.expenseCategories || []).filter(Boolean);
 }
 
-function renderBreakdownSelectors(state){
-  const categoriesRoot = el("dashBreakdownCategories");
-  const groupsRoot = el("dashBreakdownGroups");
-  if(!categoriesRoot || !groupsRoot) return;
+function syncBreakdownEntitySelect(state){
+  const aggMode = el("dashAgg")?.value || "category";
+  const options = entitiesForAgg(state.config, aggMode);
+  const select = el("dashBreakdownEntity");
+  if(!select) return;
 
-  const selectedCats = new Set(checklistValues("dashBreakdownCategories"));
-  const selectedGroups = new Set(checklistValues("dashBreakdownGroups"));
+  const prev = select.value;
+  select.innerHTML = options.map(v => `<option value="${escapeHTML(v)}">${escapeHTML(v)}</option>`).join("");
+  if(options.includes(prev)) select.value = prev;
+  else select.value = options[0] || "";
 
-  const categories = (state.config?.expenseCategories || []).filter(Boolean);
-  const groups = (state.config?.expenseGroups || []).filter(Boolean);
-
-  categoriesRoot.innerHTML = categories.map(name=>`<label><input type="checkbox" value="${escapeHTML(name)}" ${selectedCats.size ? (selectedCats.has(name) ? "checked" : "") : "checked"} /> ${escapeHTML(name)}</label>`).join("") || '<span class="muted">Sin categorías.</span>';
-  groupsRoot.innerHTML = groups.map(name=>`<label><input type="checkbox" value="${escapeHTML(name)}" ${selectedGroups.size ? (selectedGroups.has(name) ? "checked" : "") : "checked"} /> ${escapeHTML(name)}</label>`).join("") || '<span class="muted">Sin grupos.</span>';
+  const lab = el("labDashBreakdownEntity");
+  const hint = el("hintDashBreakdownEntity");
+  if(aggMode === "group"){
+    if(lab) lab.textContent = "Elegir grupo para comparativa";
+    if(hint) hint.textContent = "Mostrando comparativa para el grupo seleccionado.";
+  }else{
+    if(lab) lab.textContent = "Elegir categoría para comparativa";
+    if(hint) hint.textContent = "Mostrando comparativa para la categoría seleccionada.";
+  }
 }
 
 function selectedBreakdownEntities(state){
-  const mode = el("dashAgg")?.value || "category";
-  const all = mode === "group"
-    ? (state.config?.expenseGroups || []).filter(Boolean)
-    : (state.config?.expenseCategories || []).filter(Boolean);
-
-  const selected = mode === "group"
-    ? checklistValues("dashBreakdownGroups")
-    : checklistValues("dashBreakdownCategories");
-
-  return selected.length ? selected : all;
+  const aggMode = el("dashAgg")?.value || "category";
+  const all = entitiesForAgg(state.config, aggMode);
+  const selected = el("dashBreakdownEntity")?.value || "";
+  return selected ? [selected] : all.slice(0, 1);
 }
 
 export function initDashboard(state){
   // refrescos por eventos
   state.bus.on("dashboard:refresh", ()=> refreshDash(state));
   state.bus.on("tx:changed", ()=> refreshDash(state));
-  state.bus.on("config:changed", ()=> { renderBreakdownSelectors(state); refreshDash(state); });
+  state.bus.on("config:changed", ()=> { syncBreakdownEntitySelect(state); refreshDash(state); });
   state.bus.on("budgets:changed", ()=> refreshDash(state));
 
   // controles propios
@@ -70,12 +70,11 @@ export function initDashboard(state){
   el("dashMonth").addEventListener("change", ()=> refreshDash(state));
   el("dashScope").addEventListener("change", ()=> refreshDash(state));
   el("dashCatsMode").addEventListener("change", ()=> refreshDash(state));
-  el("dashAgg").addEventListener("change", ()=> { syncBreakdownEntityOptions(state); refreshDash(state); });
+  el("dashAgg").addEventListener("change", ()=> { syncBreakdownEntitySelect(state); refreshDash(state); });
   el("dashMonthlyWindow").addEventListener("change", ()=> refreshDash(state));
-  el("dashBreakdownCategories")?.addEventListener("change", ()=> refreshDash(state));
-  el("dashBreakdownGroups")?.addEventListener("change", ()=> refreshDash(state));
+  el("dashBreakdownEntity")?.addEventListener("change", ()=> refreshDash(state));
 
-  renderBreakdownSelectors(state);
+  syncBreakdownEntitySelect(state);
   refreshDash(state);
 }
 
@@ -335,7 +334,8 @@ function renderCharts(state, list, month, byCatExpense, byCatIncome, byCatReentr
 
   const selectedCount = selectedBreakdownEntities(state).length;
   const breakdownTitle = el("dashAgg").value === "group" ? "Gastos por grupo (comparativa)" : "Gastos por categoría (comparativa)";
-  el("hMonthlyBreakdown").textContent = `${breakdownTitle} · ${selectedCount} seleccionado(s)`;
+  const selectedName = selectedBreakdownEntities(state)[0] || "";
+  el("hMonthlyBreakdown").textContent = selectedName ? `${breakdownTitle}: ${selectedName}` : breakdownTitle;
   const breakdownPalette = buildPalette(monthlyBreakdown.labels.length, "expense");
   state.charts.monthlyBreakdown = new Chart(el("chartMonthlyBreakdown"), {
     type: "bar",
