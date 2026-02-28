@@ -24,11 +24,46 @@ function expenseKeyFromAgg(tx, config, aggMode){
   return group || tx.category;
 }
 
+function breakdownEntitiesForMode(config, aggMode){
+  if(aggMode === "group") return (config.expenseGroups || []).filter(Boolean);
+  return (config.expenseCategories || []).filter(Boolean);
+}
+
+function syncBreakdownEntityOptions(state){
+  const aggMode = el("dashAgg")?.value || "category";
+  const allEntities = breakdownEntitiesForMode(state.config, aggMode);
+  const select = el("dashBreakdownEntities");
+  if(!select) return;
+
+  const previous = new Set([...select.selectedOptions].map(o => o.value));
+  const hadSelection = previous.size > 0;
+
+  select.innerHTML = allEntities.map(name => `<option value="${escapeHTML(name)}">${escapeHTML(name)}</option>`).join("");
+
+  for(const opt of select.options){
+    opt.selected = hadSelection ? previous.has(opt.value) : true;
+  }
+
+  const label = el("labDashBreakdownEntities");
+  if(label) label.textContent = aggMode === "group"
+    ? "Ver grupos en comparativa"
+    : "Ver categorías en comparativa";
+}
+
+function selectedBreakdownEntities(state){
+  const aggMode = el("dashAgg")?.value || "category";
+  const allEntities = breakdownEntitiesForMode(state.config, aggMode);
+  const select = el("dashBreakdownEntities");
+  if(!select) return allEntities;
+  const selected = [...select.selectedOptions].map(o=>o.value).filter(Boolean);
+  return selected.length ? selected : allEntities;
+}
+
 export function initDashboard(state){
   // refrescos por eventos
   state.bus.on("dashboard:refresh", ()=> refreshDash(state));
   state.bus.on("tx:changed", ()=> refreshDash(state));
-  state.bus.on("config:changed", ()=> refreshDash(state));
+  state.bus.on("config:changed", ()=> { syncBreakdownEntityOptions(state); refreshDash(state); });
   state.bus.on("budgets:changed", ()=> refreshDash(state));
 
   // controles propios
@@ -36,9 +71,11 @@ export function initDashboard(state){
   el("dashMonth").addEventListener("change", ()=> refreshDash(state));
   el("dashScope").addEventListener("change", ()=> refreshDash(state));
   el("dashCatsMode").addEventListener("change", ()=> refreshDash(state));
-  el("dashAgg").addEventListener("change", ()=> refreshDash(state));
+  el("dashAgg").addEventListener("change", ()=> { syncBreakdownEntityOptions(state); refreshDash(state); });
   el("dashMonthlyWindow").addEventListener("change", ()=> refreshDash(state));
+  el("dashBreakdownEntities")?.addEventListener("change", ()=> refreshDash(state));
 
+  syncBreakdownEntityOptions(state);
   refreshDash(state);
 }
 
@@ -173,7 +210,7 @@ function renderCharts(state, list, month, byCatExpense, byCatIncome, byCatReentr
 
   const monthlyWindow = Number(el("dashMonthlyWindow").value || 6);
   const monthlyMetrics = buildMonthlyComparisonMetrics(state.tx, config, month, monthlyWindow);
-  const monthlyBreakdown = buildMonthlyBreakdownMetrics(state.tx, config, monthlyMetrics.months, el("dashAgg").value);
+  const monthlyBreakdown = buildMonthlyBreakdownMetrics(state.tx, config, monthlyMetrics.months, el("dashAgg").value, selectedBreakdownEntities(state));
 
   if(!hasChart){
     ["fallbackDaily", "fallbackMonthly", "fallbackCats", "fallbackMonthlyBreakdown", "fallbackPay"].forEach(id => {
@@ -296,8 +333,9 @@ function renderCharts(state, list, month, byCatExpense, byCatIncome, byCatReentr
     }
   });
 
+  const selectedCount = selectedBreakdownEntities(state).length;
   const breakdownTitle = el("dashAgg").value === "group" ? "Gastos por grupo (comparativa)" : "Gastos por categoría (comparativa)";
-  el("hMonthlyBreakdown").textContent = breakdownTitle;
+  el("hMonthlyBreakdown").textContent = `${breakdownTitle} · ${selectedCount} seleccionado(s)`;
   const breakdownPalette = buildPalette(monthlyBreakdown.labels.length, "expense");
   state.charts.monthlyBreakdown = new Chart(el("chartMonthlyBreakdown"), {
     type: "bar",
@@ -386,7 +424,7 @@ function buildMonthlyComparisonMetrics(txList, config, month, monthsBack){
   return { months, income, expense, net };
 }
 
-function buildMonthlyBreakdownMetrics(txList, config, monthKeys, aggMode){
+function buildMonthlyBreakdownMetrics(txList, config, monthKeys, aggMode, selectedEntities = []){
   const monthMap = new Map(monthKeys.map(key => [key, new Map()]));
 
   for(const tx of txList){
@@ -405,9 +443,10 @@ function buildMonthlyBreakdownMetrics(txList, config, monthKeys, aggMode){
       return acc;
     }, new Map());
 
+  const selectedSet = new Set((selectedEntities || []).filter(Boolean));
   const topLabels = Array.from(labels.entries())
+    .filter(([key])=> selectedSet.size ? selectedSet.has(key) : true)
     .sort((a,b)=> b[1] - a[1])
-    .slice(0, 5)
     .map(([key])=> key);
 
   const series = monthKeys.map(month => {
