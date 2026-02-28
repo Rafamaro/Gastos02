@@ -1,7 +1,7 @@
 import { el, fmtMoney, toBase, groupSum, topEntry, escapeHTML } from "./utils.js";
 import { getFiltered } from "./ingreso.js";
 
-const REENTRY_TRANSFER_SOURCES = ["Reingreso por transferencia", "Reintegro"];
+const REENTRY_TRANSFER_SOURCES = ["Reingreso por transferencia", "Reintegro", "Venta de divisas"];
 
 function isRegularIncome(tx){
   return tx.type === "income" && !isReentryTransfer(tx);
