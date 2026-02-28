@@ -5,20 +5,28 @@ export const LS = {
 };
 
 export const defaults = {
+  baseCurrency: "ARS",
+  currencies: ["ARS", "USD", "EUR"],
+  locale: "es-AR",
+  expenseCategories: [
+    "Comida", "Transporte", "Salud", "Hogar", "Servicios", "Educación",
+    "Ocio", "Impuestos", "Ropa", "Trabajo", "Otros"
+  ],
+  incomeCategories: [
+    "Salario", "Honorarios", "Reembolso", "Inversiones", "Ventas", "Otros ingresos"
+  ],
+  reentryCategories: ["Reintegro", "Devoluciones", "Reembolso de gasto"],
+  expenseGroups: ["Esenciales", "Finanzas", "Estilo de vida", "Trabajo"],
+  expenseCategoryGroups: {},
+  ratesToBase: { ARS: 1, USD: 1050, EUR: 1150 },
+  budgets: {},
+
+  // compat nuevo esquema
   version: 1,
   currency: "ARS",
-  groups: [
-    { id: "hogar", name: "Hogar" },
-    { id: "trabajo", name: "Trabajo" }
-  ],
-  categories: [
-    { id: "comida", name: "Comida", groupId: "hogar" },
-    { id: "transporte", name: "Transporte", groupId: "hogar" }
-  ],
-  payment_methods: [
-    { id: "tarjeta", name: "Tarjeta" },
-    { id: "efectivo", name: "Efectivo" }
-  ],
+  categories: [{ id: "comida", name: "Comida", groupId: "esenciales" }],
+  groups: [{ id: "esenciales", name: "Esenciales" }],
+  payment_methods: [{ id: "tarjeta", name: "Tarjeta" }, { id: "efectivo", name: "Efectivo" }],
   tags: [],
   ui: { defaultView: "month" }
 };

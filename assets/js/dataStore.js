@@ -3,6 +3,8 @@ import { monthISO } from "./utils.js";
 import { chooseDataDirectory, getSavedDirectory, isFsAccessSupported, listMonthKeys, readJsonFile, writeJsonFile } from "./storage/fsAccess.js";
 
 const UI_STATE_KEY = "gastos02:ui-state";
+const GROUP_PREFIX = "__group__::";
+const PAYLOAD_GROUP_PREFIX = "[GRUPO] ";
 
 const runtime = {
   mode: "manual",
@@ -21,50 +23,91 @@ function monthInBuenosAires(){
   return `${year}-${month}`;
 }
 
-function toLegacyConfig(cfg){
-  const expenseCategories = (cfg.categories || []).map(c=> c.name);
-  const expenseCategoryGroups = Object.fromEntries((cfg.categories || []).filter(c=>c.groupId).map(c=> [c.name, cfg.groups.find(g=>g.id===c.groupId)?.name || c.groupId]));
-  return {
-    ...cfg,
-    baseCurrency: cfg.currency,
-    currencies: [cfg.currency],
-    locale: "es-AR",
-    expenseCategories,
-    incomeCategories: ["Ingresos"],
-    reentryCategories: ["Reintegro"],
-    expenseGroups: (cfg.groups || []).map(g=> g.name),
-    expenseCategoryGroups
-  };
-}
-
-function fromLegacyConfig(cfg){
-  const groups = (cfg.expenseGroups || []).map(name=> ({ id: slug(name), name }));
-  return {
-    version: 1,
-    currency: cfg.baseCurrency || "ARS",
-    groups,
-    categories: (cfg.expenseCategories || []).map(name => ({ id: slug(name), name, groupId: slug(cfg.expenseCategoryGroups?.[name] || "") || null })),
-    payment_methods: (cfg.paymentMethods || ["Tarjeta", "Efectivo"]).map(name=> ({ id: slug(name), name })),
-    tags: [],
-    ui: { defaultView: "month" }
-  };
-}
-
-function slug(v){ return String(v || "").trim().toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-_]/g, ""); }
-
 function validMonthKey(v){ return /^\d{4}-\d{2}$/.test(String(v || "")); }
-
-function emptyMonth(monthKey){
-  return { version: 1, month: monthKey, currency: runtime.config?.currency || "ARS", movements: [] };
-}
+function uniqueTrimmed(values = []){ return [...new Set(values.map(v => String(v || "").trim()).filter(Boolean))]; }
+function slug(v){ return String(v || "").trim().toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-_]/g, ""); }
 
 function loadJsonLocal(key, fallback = null){
   try{ return JSON.parse(localStorage.getItem(key) || "null") ?? fallback; }
   catch(_err){ return fallback; }
 }
+function saveJsonLocal(key, value){ localStorage.setItem(key, JSON.stringify(value)); }
 
-function saveJsonLocal(key, value){
-  localStorage.setItem(key, JSON.stringify(value));
+function normalizeLegacyConfig(cfg = {}){
+  const out = {
+    ...structuredClone(defaults),
+    ...(cfg || {})
+  };
+
+  // compat import schema nuevo
+  if(Array.isArray(cfg?.categories) && !Array.isArray(cfg?.expenseCategories)){
+    out.expenseCategories = cfg.categories.map(c => String(c?.name || "").trim()).filter(Boolean);
+  }
+  if(Array.isArray(cfg?.groups) && !Array.isArray(cfg?.expenseGroups)){
+    out.expenseGroups = cfg.groups.map(g => String(g?.name || "").trim()).filter(Boolean);
+  }
+
+  out.baseCurrency = String(out.baseCurrency || out.currency || "ARS").toUpperCase();
+  out.currencies = uniqueTrimmed(Array.isArray(out.currencies) ? out.currencies : [out.baseCurrency]);
+  if(!out.currencies.includes(out.baseCurrency)) out.currencies.unshift(out.baseCurrency);
+  out.locale = String(out.locale || "es-AR");
+
+  out.expenseCategories = uniqueTrimmed(out.expenseCategories || defaults.expenseCategories);
+  out.incomeCategories = uniqueTrimmed(out.incomeCategories || defaults.incomeCategories);
+  out.reentryCategories = uniqueTrimmed(out.reentryCategories || defaults.reentryCategories);
+  out.expenseGroups = uniqueTrimmed(out.expenseGroups || defaults.expenseGroups);
+
+  const groupMap = out.expenseCategoryGroups && typeof out.expenseCategoryGroups === "object" ? out.expenseCategoryGroups : {};
+  out.expenseCategoryGroups = Object.fromEntries(
+    Object.entries(groupMap)
+      .map(([k, v])=> [String(k || "").trim(), String(v || "").trim()])
+      .filter(([k, v])=> k && v)
+  );
+
+  out.ratesToBase = { ...(out.ratesToBase || {}) };
+  for(const c of out.currencies){
+    const rate = Number(out.ratesToBase[c]);
+    out.ratesToBase[c] = Number.isFinite(rate) && rate > 0 ? rate : 1;
+  }
+  out.ratesToBase[out.baseCurrency] = 1;
+
+  if(!out.budgets || typeof out.budgets !== "object") out.budgets = {};
+
+  return out;
+}
+
+function toConfigFileShape(legacyCfg){
+  const cfg = normalizeLegacyConfig(legacyCfg);
+  const groupsByName = Object.fromEntries((cfg.expenseGroups || []).map(name => [name, { id: slug(name), name }]));
+  return {
+    version: 1,
+    currency: cfg.baseCurrency,
+    categories: (cfg.expenseCategories || []).map(name => ({
+      id: slug(name),
+      name,
+      groupId: cfg.expenseCategoryGroups?.[name] ? slug(cfg.expenseCategoryGroups[name]) : null
+    })),
+    groups: (cfg.expenseGroups || []).map(name => groupsByName[name]),
+    payment_methods: (cfg.paymentMethods || ["Tarjeta", "Débito", "Efectivo", "Transferencia", "Reintegro", "Cripto", "Otro"]).map(name=> ({ id: slug(name), name })),
+    tags: cfg.tags || [],
+    ui: { ...(cfg.ui || {}), defaultView: "month" },
+
+    // extras para mantener compatibilidad de UI actual
+    baseCurrency: cfg.baseCurrency,
+    currencies: cfg.currencies,
+    locale: cfg.locale,
+    expenseCategories: cfg.expenseCategories,
+    incomeCategories: cfg.incomeCategories,
+    reentryCategories: cfg.reentryCategories,
+    expenseGroups: cfg.expenseGroups,
+    expenseCategoryGroups: cfg.expenseCategoryGroups,
+    ratesToBase: cfg.ratesToBase,
+    budgets: cfg.budgets
+  };
+}
+
+function emptyMonth(monthKey){
+  return { version: 1, month: monthKey, currency: runtime.config?.baseCurrency || "ARS", movements: [] };
 }
 
 async function ensureMonth(monthKey){
@@ -84,6 +127,12 @@ async function saveMonthObj(monthKey, data){
   runtime.monthData.set(monthKey, data);
   if(runtime.dirHandle) await writeJsonFile(runtime.dirHandle, `${monthKey}.json`, data);
   else saveJsonLocal(`gastos02:${monthKey}`, data);
+}
+
+async function persistCurrentConfig(){
+  const filePayload = toConfigFileShape(runtime.config || defaults);
+  if(runtime.dirHandle) await writeJsonFile(runtime.dirHandle, "config.json", filePayload);
+  else saveJsonLocal("gastos02:config", filePayload);
 }
 
 export function getBackendMode(){ return runtime.mode; }
@@ -136,21 +185,15 @@ export async function getConfig(){
   if(runtime.dirHandle) cfg = await readJsonFile(runtime.dirHandle, "config.json");
   else cfg = loadJsonLocal("gastos02:config");
 
-  if(!cfg){
-    cfg = structuredClone(defaults);
-    if(runtime.dirHandle) await writeJsonFile(runtime.dirHandle, "config.json", cfg);
-    else saveJsonLocal("gastos02:config", cfg);
-  }
-  runtime.config = cfg;
-  return cfg;
+  runtime.config = normalizeLegacyConfig(cfg || defaults);
+  await persistCurrentConfig();
+  return runtime.config;
 }
 
 export async function saveConfig(payload){
-  const cfg = payload?.categories ? payload : fromLegacyConfig(payload || {});
-  runtime.config = cfg;
-  if(runtime.dirHandle) await writeJsonFile(runtime.dirHandle, "config.json", cfg);
-  else saveJsonLocal("gastos02:config", cfg);
-  return toLegacyConfig(cfg);
+  runtime.config = normalizeLegacyConfig(payload || runtime.config || defaults);
+  await persistCurrentConfig();
+  return runtime.config;
 }
 
 export async function loadCurrentMonth(preferredMonth){
@@ -193,9 +236,10 @@ function txFromMovement(mov, month){
     type: mov.type,
     date: mov.date,
     amount: mov.amount,
-    currency: runtime.config.currency,
+    currency: runtime.config.baseCurrency,
     category: mov.categoryId,
     pay: mov.paymentMethodId || "",
+    vendor: mov.vendor || "",
     tags: mov.tags || [],
     notes: mov.note || "",
     desc: mov.note || "",
@@ -211,23 +255,145 @@ function movementFromTx(tx){
     type: tx.type === "income" ? "income" : "expense",
     amount: Math.round(Number(tx.amount) || 0),
     categoryId: tx.categoryId || tx.category || "otros",
-    groupId: tx.group || null,
+    groupId: tx.group || runtime.config.expenseCategoryGroups?.[tx.category] || null,
     paymentMethodId: tx.pay || null,
+    vendor: tx.vendor || "",
     note: tx.notes || tx.desc || "",
     tags: tx.tags || []
   };
 }
 
-export async function getSettings(){ return toLegacyConfig(await getConfig()); }
-export async function saveSettings(payload){ return saveConfig(payload); }
-export async function listCurrencies(){ return [{ code: (await getConfig()).currency }]; }
-export async function listGroups(){ const cfg = await getConfig(); return cfg.groups.map(g=> ({ id:g.id, name:g.name })); }
-export async function createGroup({ name }){ const cfg = await getConfig(); cfg.groups.push({ id: slug(name), name }); await saveConfig(cfg); return { id: slug(name), name }; }
-export async function updateGroup(id, payload){ const cfg = await getConfig(); const g = cfg.groups.find(x=>x.id===id || x.name===id); if(g) g.name = payload.name || g.name; await saveConfig(cfg); return g; }
-export async function listCategories(){ const cfg = await getConfig(); return cfg.categories.map(c=> ({ id:c.id, name:c.name, type:"expense", group: c.groupId ? { id:c.groupId, name:c.groupId } : null })); }
-export async function createCategory({ name, group }){ const cfg = await getConfig(); const c = { id: slug(name), name, groupId: group?.id || slug(group) || null }; cfg.categories.push(c); await saveConfig(cfg); return c; }
-export async function updateCategory(id, payload){ const cfg = await getConfig(); const c = cfg.categories.find(x=>x.id===id || x.name===id); if(c){ c.name = payload.name || c.name; c.groupId = payload.group?.id || slug(payload.group || c.groupId || "") || null; } await saveConfig(cfg); return c; }
-export async function deleteCategory(id){ const cfg = await getConfig(); cfg.categories = cfg.categories.filter(c=> c.id !== id && c.name !== id); await saveConfig(cfg); return true; }
+export async function getSettings(){ return normalizeLegacyConfig(await getConfig()); }
+
+export async function saveSettings(payload){
+  const merged = normalizeLegacyConfig({ ...(await getConfig()), ...(payload || {}) });
+  runtime.config = merged;
+  await persistCurrentConfig();
+  return merged;
+}
+
+export async function listCurrencies(){ return (runtime.config?.currencies || (await getConfig()).currencies).map(code => ({ code })); }
+
+export async function listGroups(){
+  const cfg = await getConfig();
+  return (cfg.expenseGroups || []).map(name => ({ id: name, name, description: "" }));
+}
+
+export async function createGroup({ name } = {}){
+  const safeName = String(name || "").trim();
+  if(!safeName) throw new Error("Nombre de grupo inválido");
+  const cfg = await getConfig();
+  cfg.expenseGroups = uniqueTrimmed([...(cfg.expenseGroups || []), safeName]);
+  await persistCurrentConfig();
+  return { id: safeName, name: safeName };
+}
+
+export async function updateGroup(id, payload = {}){
+  const oldName = String(id || "").trim();
+  const newName = String(payload.name || oldName).trim();
+  if(!oldName || !newName) throw new Error("Nombre de grupo inválido");
+
+  const cfg = await getConfig();
+  cfg.expenseGroups = (cfg.expenseGroups || []).map(g => g === oldName ? newName : g);
+  cfg.expenseGroups = uniqueTrimmed(cfg.expenseGroups);
+
+  const map = { ...(cfg.expenseCategoryGroups || {}) };
+  Object.keys(map).forEach(cat => { if(map[cat] === oldName) map[cat] = newName; });
+  cfg.expenseCategoryGroups = map;
+
+  Object.keys(cfg.budgets || {}).forEach(month => {
+    const sourceKey = `${GROUP_PREFIX}${oldName}`;
+    const targetKey = `${GROUP_PREFIX}${newName}`;
+    if(Object.prototype.hasOwnProperty.call(cfg.budgets[month] || {}, sourceKey)){
+      cfg.budgets[month][targetKey] = Number(cfg.budgets[month][sourceKey]) || 0;
+      delete cfg.budgets[month][sourceKey];
+    }
+  });
+
+  await persistCurrentConfig();
+  return { id: newName, name: newName };
+}
+
+export async function listCategories({ type } = {}){
+  const cfg = await getConfig();
+  const local = [
+    ...(cfg.expenseCategories || []).map(name => ({
+      id: `expense:${name}`,
+      name,
+      type: "expense",
+      group: cfg.expenseCategoryGroups?.[name] ? { name: cfg.expenseCategoryGroups[name], type: "group" } : null
+    })),
+    ...(cfg.incomeCategories || []).map(name => ({ id: `income:${name}`, name, type: "income", group: null })),
+    ...(cfg.reentryCategories || []).map(name => ({ id: `reentry:${name}`, name, type: "reentry", group: null }))
+  ];
+  if(type === "reentry") return local.filter(x => x.type === "reentry");
+  return type ? local.filter(x => x.type === type) : local;
+}
+
+export async function createCategory({ name, type, group } = {}){
+  const safeName = String(name || "").trim();
+  const safeType = type === "income" ? "income" : type === "reentry" ? "reentry" : "expense";
+  if(!safeName) throw new Error("Nombre de categoría inválido");
+
+  const cfg = await getConfig();
+  if(safeType === "income") cfg.incomeCategories = uniqueTrimmed([...(cfg.incomeCategories || []), safeName]);
+  else if(safeType === "reentry") cfg.reentryCategories = uniqueTrimmed([...(cfg.reentryCategories || []), safeName]);
+  else cfg.expenseCategories = uniqueTrimmed([...(cfg.expenseCategories || []), safeName]);
+
+  if(safeType === "expense"){
+    const groupName = String(group?.name || group || "").trim();
+    if(groupName) cfg.expenseCategoryGroups[safeName] = groupName;
+  }
+
+  await persistCurrentConfig();
+  return { id: `${safeType}:${safeName}`, name: safeName, type: safeType };
+}
+
+export async function updateCategory(id, payload = {}){
+  const [rawType, ...rest] = String(id || "").split(":");
+  const currentType = rawType || "expense";
+  const currentName = rest.join(":").trim();
+  const nextType = payload.type || currentType;
+  const nextName = String(payload.name || currentName).trim();
+  if(!currentName || !nextName) throw new Error("Categoría inválida");
+
+  const cfg = await getConfig();
+  const removeFrom = (arr)=> arr.filter(x => x !== currentName);
+  cfg.expenseCategories = removeFrom(cfg.expenseCategories || []);
+  cfg.incomeCategories = removeFrom(cfg.incomeCategories || []);
+  cfg.reentryCategories = removeFrom(cfg.reentryCategories || []);
+
+  if(nextType === "income") cfg.incomeCategories = uniqueTrimmed([...(cfg.incomeCategories || []), nextName]);
+  else if(nextType === "reentry") cfg.reentryCategories = uniqueTrimmed([...(cfg.reentryCategories || []), nextName]);
+  else cfg.expenseCategories = uniqueTrimmed([...(cfg.expenseCategories || []), nextName]);
+
+  const groupName = String(payload.group?.name || payload.group || cfg.expenseCategoryGroups?.[currentName] || "").trim();
+  delete cfg.expenseCategoryGroups[currentName];
+  if(nextType === "expense" && groupName) cfg.expenseCategoryGroups[nextName] = groupName;
+
+  await persistCurrentConfig();
+  return { id: `${nextType}:${nextName}`, name: nextName, type: nextType };
+}
+
+export async function deleteCategory(id){
+  const [rawType, ...rest] = String(id || "").split(":");
+  const type = rawType || "expense";
+  const name = rest.join(":").trim() || String(id || "").trim();
+
+  const cfg = await getConfig();
+  if(type === "income") cfg.incomeCategories = (cfg.incomeCategories || []).filter(x => x !== name);
+  else if(type === "reentry") cfg.reentryCategories = (cfg.reentryCategories || []).filter(x => x !== name);
+  else cfg.expenseCategories = (cfg.expenseCategories || []).filter(x => x !== name);
+
+  delete cfg.expenseCategoryGroups[name];
+
+  Object.keys(cfg.budgets || {}).forEach(m => {
+    delete cfg.budgets[m]?.[name];
+  });
+
+  await persistCurrentConfig();
+  return true;
+}
 
 export async function listTransactions(){
   const out = [];
@@ -277,10 +443,75 @@ export async function deleteMovement(id){
   return false;
 }
 
-export async function listBudgets(){ return []; }
-export async function upsertBudget(){ return null; }
-export async function deleteBudget(){ return null; }
-export function syncBudgetMapFromRows(){ return {}; }
+export async function listBudgets({ month } = {}){
+  const cfg = await getConfig();
+  const map = cfg.budgets || {};
+  const rows = [];
+
+  Object.entries(map).forEach(([m, data]) => {
+    if(month && m !== month) return;
+    Object.entries(data || {}).forEach(([key, amount]) => {
+      const isGroup = key.startsWith(GROUP_PREFIX);
+      rows.push({
+        id: `${m}:${key}`,
+        month: m,
+        amount: Number(amount) || 0,
+        currency: { code: cfg.baseCurrency },
+        category: { name: isGroup ? `${PAYLOAD_GROUP_PREFIX}${key.replace(GROUP_PREFIX, "")}` : key, type: "expense" }
+      });
+    });
+  });
+
+  return rows;
+}
+
+export async function upsertBudget({ month, category, amount, currency }){
+  const safeMonth = String(month || "").trim();
+  if(!safeMonth) throw new Error("Mes inválido");
+  const safeCategory = String(category || "").trim();
+  if(!safeCategory) throw new Error("Categoría inválida");
+
+  const cfg = await getConfig();
+  if(!cfg.budgets[safeMonth]) cfg.budgets[safeMonth] = {};
+  const normalizedKey = safeCategory.startsWith(PAYLOAD_GROUP_PREFIX)
+    ? `${GROUP_PREFIX}${safeCategory.replace(PAYLOAD_GROUP_PREFIX, "")}`
+    : safeCategory;
+
+  cfg.budgets[safeMonth][normalizedKey] = Number(amount) || 0;
+  await persistCurrentConfig();
+  return { month: safeMonth, category: normalizedKey, amount: Number(amount) || 0, currency };
+}
+
+export async function deleteBudget(id){
+  const raw = String(id || "");
+  const sep = raw.indexOf(":");
+  if(sep < 0) return true;
+  const month = raw.slice(0, sep);
+  const category = raw.slice(sep + 1);
+
+  const cfg = await getConfig();
+  if(cfg.budgets[month] && Object.prototype.hasOwnProperty.call(cfg.budgets[month], category)){
+    delete cfg.budgets[month][category];
+    if(Object.keys(cfg.budgets[month]).length === 0) delete cfg.budgets[month];
+    await persistCurrentConfig();
+  }
+  return true;
+}
+
+export function syncBudgetMapFromRows(rows = []){
+  const out = {};
+  for(const b of rows || []){
+    const m = String(b.month || "").trim();
+    if(!m) continue;
+    if(!out[m]) out[m] = {};
+
+    const rawName = String(b.category?.name || "");
+    const isGroup = rawName.startsWith(PAYLOAD_GROUP_PREFIX);
+    const key = isGroup ? `${GROUP_PREFIX}${rawName.replace(PAYLOAD_GROUP_PREFIX, "")}` : rawName;
+    if(key) out[m][key] = Number(b.amount) || 0;
+  }
+  return out;
+}
 
 export async function importMonthlyJson(payload){
   const data = emptyMonth(payload.month);
@@ -292,6 +523,7 @@ export async function importMonthlyJson(payload){
     categoryId: m.categoryId || m.category || "otros",
     groupId: m.groupId || m.group || null,
     paymentMethodId: m.paymentMethodId || null,
+    vendor: m.vendor || "",
     note: m.note || "",
     tags: m.tags || []
   }));

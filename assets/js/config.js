@@ -1,4 +1,4 @@
-import { el, fillSelect, monthISO, toast } from "./utils.js";
+import { el, fillSelect, monthISO, escapeHTML, toast } from "./utils.js";
 import {
   saveSettings,
   createGroup,
@@ -16,7 +16,89 @@ import {
 } from "./dataStore.js";
 
 const GROUP_BUDGET_PREFIX = "__group__::";
+const PAYLOAD_GROUP_PREFIX = "[GRUPO] ";
+
 function groupBudgetKey(group){ return `${GROUP_BUDGET_PREFIX}${group}`; }
+
+function uniqueTrimmed(values = []){
+  return [...new Set(values.map(v => String(v || "").trim()).filter(Boolean))];
+}
+
+const configPickerDraft = {
+  expense: [],
+  income: [],
+  reentry: [],
+  groups: []
+};
+
+function ensureDraftValue(key, fallback = []){
+  if(!Array.isArray(configPickerDraft[key]) || !configPickerDraft[key].length){
+    configPickerDraft[key] = uniqueTrimmed(fallback);
+  }
+  return configPickerDraft[key];
+}
+
+function renderPickerManager({ containerId, valuesKey, values = [] }){
+  const root = el(containerId);
+  if(!root) return;
+
+  const currentValues = ensureDraftValue(valuesKey, values);
+  root.innerHTML = "";
+
+  const row = document.createElement("div");
+  row.className = "picker-manager-row";
+
+  const select = document.createElement("select");
+  for(const value of currentValues){
+    const option = document.createElement("option");
+    option.value = value;
+    option.textContent = value;
+    select.appendChild(option);
+  }
+  const addOption = document.createElement("option");
+  addOption.value = "__new__";
+  addOption.textContent = "➕ Agregar nuevo...";
+  select.appendChild(addOption);
+
+  select.addEventListener("change", ()=>{
+    if(select.value !== "__new__") return;
+    const typed = window.prompt("Escribí el nuevo valor");
+    const value = String(typed || "").trim();
+    if(!value){
+      select.selectedIndex = 0;
+      return;
+    }
+    if(!currentValues.includes(value)) currentValues.push(value);
+    configPickerDraft[valuesKey] = uniqueTrimmed(currentValues);
+    renderPickerManager({ containerId, valuesKey, values: configPickerDraft[valuesKey] });
+  });
+
+  const removeBtn = document.createElement("button");
+  removeBtn.type = "button";
+  removeBtn.className = "btn small";
+  removeBtn.textContent = "Quitar seleccionada";
+  removeBtn.addEventListener("click", ()=>{
+    if(select.value === "__new__") return;
+    const value = String(select.value || "").trim();
+    configPickerDraft[valuesKey] = currentValues.filter(item => item !== value);
+    renderPickerManager({ containerId, valuesKey, values: configPickerDraft[valuesKey] });
+  });
+
+  row.appendChild(select);
+  row.appendChild(removeBtn);
+  root.appendChild(row);
+
+  const summary = document.createElement("div");
+  summary.className = "hint";
+  summary.textContent = currentValues.length
+    ? `Seleccionadas (${currentValues.length}): ${currentValues.join(", ")}`
+    : "No hay elementos seleccionados.";
+  root.appendChild(summary);
+}
+
+function readPickerValues(valuesKey){
+  return uniqueTrimmed(configPickerDraft[valuesKey] || []);
+}
 
 export function initConfig(state){
   state.bus.on("config:refresh", ()=>{
@@ -29,6 +111,7 @@ export function initConfig(state){
 
   el("btnSaveConfig")?.addEventListener("click", ()=> saveConfigFromUI(state));
   el("btnResetConfig")?.addEventListener("click", ()=> location.reload());
+
   el("btnLoadBudgets")?.addEventListener("click", ()=> renderBudgetTable(state));
   el("btnSaveBudgets")?.addEventListener("click", ()=> saveBudgetsFromUI(state));
   el("budgetMonth")?.addEventListener("change", ()=> renderBudgetTable(state));
@@ -80,6 +163,55 @@ export function initConfig(state){
   });
 }
 
+export function renderRates(state){
+  const config = state.config;
+  for(const c of config.currencies){ if(config.ratesToBase[c] == null) config.ratesToBase[c] = 1; }
+  config.ratesToBase[config.baseCurrency] = 1;
+  const box = el("ratesBox"); box.innerHTML = "";
+  const grid = document.createElement("div");
+  grid.style.display = "grid";
+  grid.style.gap = "10px";
+  grid.style.gridTemplateColumns = "repeat(2, 1fr)";
+  box.appendChild(grid);
+
+  for(const cur of config.currencies){
+    const wrap = document.createElement("div");
+    const lab = document.createElement("label");
+    lab.textContent = `${cur} → ${config.baseCurrency}`;
+    const inp = document.createElement("input");
+    inp.type = "number";
+    inp.step = "0.0001";
+    inp.min = "0";
+    inp.value = Number(config.ratesToBase[cur] ?? 1);
+    inp.dataset.cur = cur;
+    wrap.appendChild(lab);
+    wrap.appendChild(inp);
+    grid.appendChild(wrap);
+  }
+}
+
+export function renderConfigPickers(state){
+  configPickerDraft.expense = uniqueTrimmed(state.config.expenseCategories || configPickerDraft.expense || []);
+  configPickerDraft.income = uniqueTrimmed(state.config.incomeCategories || configPickerDraft.income || []);
+  configPickerDraft.reentry = uniqueTrimmed(state.config.reentryCategories || configPickerDraft.reentry || []);
+  configPickerDraft.groups = uniqueTrimmed(state.config.expenseGroups || configPickerDraft.groups || []);
+
+  renderPickerManager({ containerId: "expenseCategoriesPicker", valuesKey: "expense", values: configPickerDraft.expense });
+  renderPickerManager({ containerId: "incomeCategoriesPicker", valuesKey: "income", values: configPickerDraft.income });
+  renderPickerManager({ containerId: "reentryCategoriesPicker", valuesKey: "reentry", values: configPickerDraft.reentry });
+  renderPickerManager({ containerId: "expenseGroupsPicker", valuesKey: "groups", values: configPickerDraft.groups });
+}
+
+export function renderCategoryGrouping(state){
+  const { expenseGroups = [], expenseCategoryGroups = {}, expenseCategories = [] } = state.config;
+  el("tbodyCategoryGrouping").innerHTML = expenseCategories.map(cat => {
+    const options = ["<option value=''>Sin grupo (usa categoría)</option>"]
+      .concat(expenseGroups.filter(Boolean).map(group => `<option value="${escapeHTML(group)}" ${expenseCategoryGroups[cat]===group?"selected":""}>${escapeHTML(group)}</option>`))
+      .join("");
+    return `<tr><td style="font-weight:900">${escapeHTML(cat)}</td><td><select data-group-cat="${escapeHTML(cat)}">${options}</select></td></tr>`;
+  }).join("") || `<tr><td colspan="2" class="muted">Sin categorías de gastos.</td></tr>`;
+}
+
 function renderLocalStorageCard(state){
   const mode = getBackendMode();
   const uiState = getUiState();
@@ -106,15 +238,49 @@ function renderLocalStorageCard(state){
   });
 }
 
-export function renderConfigPickers(state){ fillSelect(el("baseCurrency"), [state.config.baseCurrency]); }
-export function renderRates(){ }
-export function renderCategoryGrouping(){ }
-
 export async function saveConfigFromUI(state){
-  state.config.baseCurrency = el("baseCurrency").value || state.config.baseCurrency;
-  state.config = await saveSettings(state.config);
+  const config = state.config;
+  const expCats = readPickerValues("expense");
+  const incCats = readPickerValues("income");
+  const reentryCats = readPickerValues("reentry");
+  const groups = readPickerValues("groups");
+
+  if(expCats.length < 3 || incCats.length < 2 || reentryCats.length < 1) return toast("Revisá categorías mínimas.", "danger");
+
+  const rates = { ...config.ratesToBase };
+  document.querySelectorAll("#ratesBox input[data-cur]").forEach(inp=>{ rates[inp.dataset.cur] = Number(inp.value) || 1; });
+  const categoryGroups = {};
+  document.querySelectorAll("#tbodyCategoryGrouping select[data-group-cat]").forEach(sel=>{ if(sel.value) categoryGroups[sel.dataset.groupCat] = sel.value.trim(); });
+
+  Object.assign(config, {
+    locale: el("numLocale").value,
+    baseCurrency: el("baseCurrency").value,
+    expenseCategories: expCats,
+    incomeCategories: incCats,
+    reentryCategories: reentryCats,
+    expenseGroups: groups,
+    expenseCategoryGroups: categoryGroups,
+    ratesToBase: rates
+  });
+
+  state.config = await saveSettings(config);
+  for(const g of groups) await createGroup({ name: g, description: "" });
+  for(const c of expCats) await createCategory({ name: c, type: "expense", group: categoryGroups[c] });
+  for(const c of incCats) await createCategory({ name: c, type: "income" });
+  for(const c of reentryCats) await createCategory({ name: c, type: "reentry" });
+
+  fillSelect(el("fCurrency"), state.config.currencies);
+  fillSelect(el("eCurrency"), state.config.currencies);
+  fillSelect(el("baseCurrency"), state.config.currencies);
+  renderConfigPickers(state);
+  renderRates(state);
+  renderCategoryGrouping(state);
+
   toast("Config guardada ✅");
   state.bus.emit("config:changed");
+  state.bus.emit("dashboard:refresh");
+  state.bus.emit("ingreso:refresh");
+  state.bus.emit("config:refresh");
 }
 
 export function renderBudgetTable(){
@@ -124,18 +290,22 @@ export function renderBudgetTable(){
 }
 
 export async function saveBudgetsFromUI(state){
-  const month = el("budgetMonth").value || monthISO();
-  const mode = el("budgetMode").value || "category";
-  const rows = [...document.querySelectorAll("#tbodyBudgets tr")];
-  for(const row of rows){
-    const key = row.dataset.key;
-    const amount = Number(row.querySelector("input")?.value || 0);
-    if(!key) continue;
-    await upsertBudget({ month, key: mode === "group" ? groupBudgetKey(key) : key, amount });
+  const m = el("budgetMonth").value || monthISO();
+  const payload = [];
+  document.querySelectorAll("#tbodyBudgets input[data-budget-key]").forEach(inp=>{
+    const v = Number(inp.value);
+    if(Number.isFinite(v) && v > 0) payload.push({ month: m, category: inp.dataset.budgetKey, amount: v, currency: state.config.baseCurrency });
+  });
+
+  for(const row of payload){
+    const category = row.category.startsWith(GROUP_BUDGET_PREFIX) ? `${PAYLOAD_GROUP_PREFIX}${row.category.replace(GROUP_BUDGET_PREFIX, "")}` : row.category;
+    await upsertBudget({ ...row, category });
   }
   state.budgetRows = await listBudgets();
   state.budgets = syncBudgetMapFromRows(state.budgetRows);
   toast("Presupuestos guardados ✅");
+  state.bus.emit("budgets:changed");
+  state.bus.emit("dashboard:refresh");
 }
 
 void createGroup;
