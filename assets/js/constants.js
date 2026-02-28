@@ -1,4 +1,4 @@
-export const APP_VERSION = "2.13";
+export const APP_VERSION = "2.21";
 
 export const LS = {
   THEME: "mov_theme_v2"
@@ -6,19 +6,19 @@ export const LS = {
 
 export const defaults = {
   baseCurrency: "ARS",
-  currencies: ["ARS", "USD", "EUR"],
+  currencies: ["ARS", "USD", "EUR", "COP", "USDT", "USDC", "TUSD", "DJED", "DAI"],
   locale: "es-AR",
   expenseCategories: [
     "Comida", "Transporte", "Salud", "Hogar", "Servicios", "Educación",
-    "Ocio", "Impuestos", "Ropa", "Trabajo", "Otros"
+    "Ocio", "Impuestos", "Ropa", "Trabajo", "Compra de divisas", "Otros"
   ],
   incomeCategories: [
     "Salario", "Honorarios", "Reembolso", "Inversiones", "Ventas", "Otros ingresos"
   ],
-  reentryCategories: ["Reintegro", "Devoluciones", "Reembolso de gasto"],
+  reentryCategories: ["Reintegro", "Devoluciones", "Reembolso de gasto", "Venta de divisas"],
   expenseGroups: ["Esenciales", "Finanzas", "Estilo de vida", "Trabajo"],
   expenseCategoryGroups: {},
-  ratesToBase: { ARS: 1, USD: 1050, EUR: 1150 },
+  ratesToBase: { ARS: 1, USD: 1050, EUR: 1150, COP: 0.27, USDT: 1050, USDC: 1050, TUSD: 1050, DJED: 1050, DAI: 1050 },
   ratesByMonth: {},
   budgets: {},
 
