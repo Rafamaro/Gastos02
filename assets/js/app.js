@@ -11,7 +11,11 @@ import {
   listTransactions,
   listBudgets,
   syncBudgetMapFromRows,
-  ensureDirectusSession
+  bootstrapStorage,
+  loadCurrentMonth,
+  getUiState,
+  loadComparisonMonths,
+  saveUiState
 } from "./dataStore.js";
 
 function makeBus(){
@@ -30,36 +34,42 @@ const state = {
   page: 1,
   PAGE_SIZE: 12,
   charts: { daily:null, monthly:null, cats:null, monthlyBreakdown:null, pay:null },
-  directus: { connected:false, baseUrl:"https://directus.drperez86.com", user:null, role:null, permissions:[], abilities:{} }
+  activeMonth: null,
+  loadedComparisonMonths: [],
+  reloadTransactions: ()=> listTransactions()
 };
 
 async function init(){
   setTheme(getTheme());
+  const modeInfo = await bootstrapStorage();
+
+  const uiState = getUiState();
+  state.activeMonth = await loadCurrentMonth(uiState.lastActiveMonth);
+
+  if(uiState.compareEnabled && uiState.compareMonths.length){
+    await loadComparisonMonths(uiState.compareMonths);
+    state.loadedComparisonMonths = uiState.compareMonths;
+  }
+
   await safelyLoadData();
 
   el("fDate").value = todayISO();
-  el("dashMonth").value = monthISO();
-  el("budgetMonth").value = monthISO();
+  el("dashMonth").value = state.activeMonth || monthISO();
+  el("budgetMonth").value = state.activeMonth || monthISO();
   el("budgetMode").value = "category";
-  el("pillMonth").textContent = "Mes: " + monthISO();
+  el("pillMonth").textContent = "Mes activo: " + state.activeMonth;
+  if(el("activeMonthPicker")) el("activeMonthPicker").value = state.activeMonth;
+  if(el("pillMode")) el("pillMode").textContent = `Modo: ${modeInfo.mode === "local-folder" ? "Local (carpeta)" : "Manual"}`;
 
-  const expectedVersion = String(window.__APP_VERSION__ || "").trim();
   console.info(`[App] APP_VERSION=${APP_VERSION}`);
-
   const versionBadge = el("appVersionBadge");
   if(versionBadge) versionBadge.textContent = `Versión ${APP_VERSION}`;
 
-  if(expectedVersion && expectedVersion !== APP_VERSION){
-    toast("Estás viendo assets cacheados", "warn");
-  }
-
-  fillSelect(el("fCurrency"), state.config.currencies);
-  fillSelect(el("eCurrency"), state.config.currencies);
-  fillSelect(el("baseCurrency"), state.config.currencies);
-
-  fillSelect(el("ePay"), ["Tarjeta","Débito","Efectivo","Transferencia","Reintegro","Reingreso por transferencia","Cripto","Otro"]);
-
-  el("numLocale").value = state.config.locale;
+  fillSelect(el("fCurrency"), [state.config.baseCurrency]);
+  fillSelect(el("eCurrency"), [state.config.baseCurrency]);
+  fillSelect(el("baseCurrency"), [state.config.baseCurrency]);
+  fillSelect(el("ePay"), ["Tarjeta","Débito","Efectivo","Transferencia","Otro"]);
+  el("numLocale").value = state.config.locale || "es-AR";
   el("baseCurrency").value = state.config.baseCurrency;
 
   initTabs(state);
@@ -71,7 +81,17 @@ async function init(){
   state.bus.emit("dashboard:refresh");
   state.bus.emit("ingreso:refresh");
   state.bus.emit("config:refresh");
-  state.bus.emit("directus:changed");
+
+  if(!modeInfo.connected) toast("Sin carpeta conectada. Usá “Elegir carpeta de datos” o modo manual.", "warn");
+  if(!modeInfo.fsSupported) toast("Modo carpeta requiere Chrome/Edge moderno. Usá modo manual.", "warn");
+
+  window.addEventListener("beforeunload", ()=>{
+    saveUiState({
+      lastActiveMonth: state.activeMonth,
+      compareEnabled: state.loadedComparisonMonths.length > 0,
+      compareMonths: state.loadedComparisonMonths
+    });
+  });
 }
 
 async function safelyLoadData(){
@@ -80,26 +100,13 @@ async function safelyLoadData(){
   state.tx = await safelyLoad("movimientos", () => listTransactions(), []);
   state.budgetRows = await safelyLoad("presupuestos", () => listBudgets(), []);
   state.budgets = syncBudgetMapFromRows(state.budgetRows);
-  const dxSession = await safelyLoad("sesión Directus", () => ensureDirectusSession(), { ok:true, connected:false, permissions:[], abilities:{} });
-  state.directus = {
-    connected: Boolean(dxSession?.connected),
-    baseUrl: dxSession?.baseUrl || "https://directus.drperez86.com",
-    user: dxSession?.user || null,
-    role: dxSession?.role || null,
-    permissions: dxSession?.permissions || [],
-    abilities: dxSession?.abilities || {},
-    access_token: dxSession?.access_token || "",
-    refresh_token: dxSession?.refresh_token || "",
-    expires: Number(dxSession?.expires || 0),
-    lastError: dxSession?.ok === false ? (dxSession?.error || null) : null
-  };
 }
 
 async function safelyLoad(label, fn, fallback){
   try{ return await fn(); }
   catch(err){
     console.error(`Error al cargar ${label}`, err);
-    toast(err.userMessage || `No se pudo cargar ${label}. Se usaron valores por defecto.`, "warn");
+    toast(`No se pudo cargar ${label}.`, "warn");
     return fallback;
   }
 }
