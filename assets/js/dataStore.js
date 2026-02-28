@@ -106,6 +106,27 @@ function toConfigFileShape(legacyCfg){
   };
 }
 
+
+function mergeConfigValues(baseCfg = {}, incoming = {}){
+  const base = normalizeLegacyConfig(baseCfg);
+  const inc = incoming || {};
+
+  return {
+    ...base,
+    ...inc,
+    baseCurrency: inc.baseCurrency || inc.currency || base.baseCurrency,
+    locale: inc.locale || base.locale,
+    currencies: uniqueTrimmed([...(base.currencies || []), ...((inc.currencies || []).map(String))]),
+    expenseCategories: uniqueTrimmed([...(base.expenseCategories || []), ...((inc.expenseCategories || []).map(String))]),
+    incomeCategories: uniqueTrimmed([...(base.incomeCategories || []), ...((inc.incomeCategories || []).map(String))]),
+    reentryCategories: uniqueTrimmed([...(base.reentryCategories || []), ...((inc.reentryCategories || []).map(String))]),
+    expenseGroups: uniqueTrimmed([...(base.expenseGroups || []), ...((inc.expenseGroups || []).map(String))]),
+    expenseCategoryGroups: { ...(base.expenseCategoryGroups || {}), ...(inc.expenseCategoryGroups || {}) },
+    ratesToBase: { ...(base.ratesToBase || {}), ...(inc.ratesToBase || {}) },
+    budgets: { ...(base.budgets || {}), ...(inc.budgets || {}) }
+  };
+}
+
 function emptyMonth(monthKey){
   return { version: 1, month: monthKey, currency: runtime.config?.baseCurrency || "ARS", movements: [] };
 }
@@ -191,7 +212,8 @@ export async function getConfig(){
 }
 
 export async function saveConfig(payload){
-  runtime.config = normalizeLegacyConfig(payload || runtime.config || defaults);
+  const current = runtime.config || await getConfig();
+  runtime.config = normalizeLegacyConfig(mergeConfigValues(current, payload || {}));
   await persistCurrentConfig();
   return runtime.config;
 }
@@ -266,7 +288,8 @@ function movementFromTx(tx){
 export async function getSettings(){ return normalizeLegacyConfig(await getConfig()); }
 
 export async function saveSettings(payload){
-  const merged = normalizeLegacyConfig({ ...(await getConfig()), ...(payload || {}) });
+  const current = runtime.config || await getConfig();
+  const merged = normalizeLegacyConfig(mergeConfigValues(current, payload || {}));
   runtime.config = merged;
   await persistCurrentConfig();
   return merged;
