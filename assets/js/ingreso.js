@@ -329,7 +329,7 @@ export function renderList(state){
 
 function rowHTML(x, config){
   const tags = (x.tags||[]).slice(0,6).map(t=>`<span class="tag">#${escapeHTML(t)}</span>`).join("");
-  const base = toBase(x.amount, x.currency, config, x.date);
+  const base = toBase(x.amount, x.currency, config, x.date, x.fxRate);
   const isReentry = x.type==="income" && String(x.pay||"").trim().toLowerCase()==="reintegro";
   const sign = x.type==="expense" ? "−" : "+";
   const badge = isReentry
