@@ -1,7 +1,7 @@
-import { el, fmtMoney, toBase, groupSum, topEntry, escapeHTML } from "./utils.js";
+import { el, fmtMoney, toBase, groupSum, topEntry, escapeHTML, maskedValue, isAnonymized } from "./utils.js";
 import { getFiltered } from "./ingreso.js";
 
-const REENTRY_TRANSFER_SOURCES = ["Reingreso por transferencia", "Reintegro"];
+const REENTRY_TRANSFER_SOURCES = ["Reingreso por transferencia", "Reintegro", "Venta de divisas"];
 
 function isRegularIncome(tx){
   return tx.type === "income" && !isReentryTransfer(tx);
@@ -24,11 +24,45 @@ function expenseKeyFromAgg(tx, config, aggMode){
   return group || tx.category;
 }
 
+function entitiesForAgg(config, aggMode){
+  if(aggMode === "group") return (config?.expenseGroups || []).filter(Boolean);
+  return (config?.expenseCategories || []).filter(Boolean);
+}
+
+function syncBreakdownEntitySelect(state){
+  const aggMode = el("dashAgg")?.value || "category";
+  const options = entitiesForAgg(state.config, aggMode);
+  const select = el("dashBreakdownEntity");
+  if(!select) return;
+
+  const prev = select.value;
+  select.innerHTML = options.map(v => `<option value="${escapeHTML(v)}">${escapeHTML(v)}</option>`).join("");
+  if(options.includes(prev)) select.value = prev;
+  else select.value = options[0] || "";
+
+  const lab = el("labDashBreakdownEntity");
+  const hint = el("hintDashBreakdownEntity");
+  if(aggMode === "group"){
+    if(lab) lab.textContent = "Elegir grupo para comparativa";
+    if(hint) hint.textContent = "Mostrando comparativa para el grupo seleccionado.";
+  }else{
+    if(lab) lab.textContent = "Elegir categoría para comparativa";
+    if(hint) hint.textContent = "Mostrando comparativa para la categoría seleccionada.";
+  }
+}
+
+function selectedBreakdownEntities(state){
+  const aggMode = el("dashAgg")?.value || "category";
+  const all = entitiesForAgg(state.config, aggMode);
+  const selected = el("dashBreakdownEntity")?.value || "";
+  return selected ? [selected] : all.slice(0, 1);
+}
+
 export function initDashboard(state){
   // refrescos por eventos
   state.bus.on("dashboard:refresh", ()=> refreshDash(state));
   state.bus.on("tx:changed", ()=> refreshDash(state));
-  state.bus.on("config:changed", ()=> refreshDash(state));
+  state.bus.on("config:changed", ()=> { syncBreakdownEntitySelect(state); refreshDash(state); });
   state.bus.on("budgets:changed", ()=> refreshDash(state));
 
   // controles propios
@@ -36,9 +70,11 @@ export function initDashboard(state){
   el("dashMonth").addEventListener("change", ()=> refreshDash(state));
   el("dashScope").addEventListener("change", ()=> refreshDash(state));
   el("dashCatsMode").addEventListener("change", ()=> refreshDash(state));
-  el("dashAgg").addEventListener("change", ()=> refreshDash(state));
+  el("dashAgg").addEventListener("change", ()=> { syncBreakdownEntitySelect(state); refreshDash(state); });
   el("dashMonthlyWindow").addEventListener("change", ()=> refreshDash(state));
+  el("dashBreakdownEntity")?.addEventListener("change", ()=> refreshDash(state));
 
+  syncBreakdownEntitySelect(state);
   refreshDash(state);
 }
 
@@ -68,19 +104,27 @@ export function refreshDash(state){
   const reentryTransfers = incomes.filter(isReentryTransfer);
   const regularIncomes = incomes.filter(isRegularIncome);
 
-  const incTotal = regularIncomes.reduce((s,x)=> s + toBase(x.amount, x.currency, config, x.date), 0);
-  const reentryTotal = reentryTransfers.reduce((s,x)=> s + toBase(x.amount, x.currency, config, x.date), 0);
-  const expTotal = expenses.reduce((s,x)=> s + toBase(x.amount, x.currency, config, x.date), 0);
-  const net = incTotal + reentryTotal - expTotal;
+  const netImpacting = nlist.filter(x => x.includeInNet !== false);
+  const netImpactingIncome = netImpacting.filter(x => x.type === "income");
+  const netImpactingExpenses = netImpacting.filter(x => x.type === "expense");
+  const netImpactingReentry = netImpactingIncome.filter(isReentryTransfer);
+  const netImpactingRegularIncome = netImpactingIncome.filter(isRegularIncome);
+
+  const incTotal = regularIncomes.reduce((s,x)=> s + toBase(x.amount, x.currency, config, x.date, x.fxRate), 0);
+  const reentryTotal = reentryTransfers.reduce((s,x)=> s + toBase(x.amount, x.currency, config, x.date, x.fxRate), 0);
+  const expTotal = expenses.reduce((s,x)=> s + toBase(x.amount, x.currency, config, x.date, x.fxRate), 0);
+  const net = netImpactingRegularIncome.reduce((s,x)=> s + toBase(x.amount, x.currency, config, x.date, x.fxRate), 0)
+    + netImpactingReentry.reduce((s,x)=> s + toBase(x.amount, x.currency, config, x.date, x.fxRate), 0)
+    - netImpactingExpenses.reduce((s,x)=> s + toBase(x.amount, x.currency, config, x.date, x.fxRate), 0);
 
   const count = nlist.length;
   const avg = count ? (incTotal + reentryTotal + expTotal) / count : 0;
 
   const expenseAgg = el("dashAgg").value;
-  const byCatExpense = groupSum(expenses, x=>expenseKeyFromAgg(x, config, expenseAgg), x=>toBase(x.amount, x.currency, config, x.date));
-  const byCatIncome = groupSum(regularIncomes, x=>x.category, x=>toBase(x.amount, x.currency, config, x.date));
-  const byCatReentry = groupSum(reentryTransfers, x=>x.category, x=>toBase(x.amount, x.currency, config, x.date));
-  const byPay = groupSum(nlist, x=>x.pay, x=>toBase(x.amount, x.currency, config, x.date));
+  const byCatExpense = groupSum(expenses, x=>expenseKeyFromAgg(x, config, expenseAgg), x=>toBase(x.amount, x.currency, config, x.date, x.fxRate));
+  const byCatIncome = groupSum(regularIncomes, x=>x.category, x=>toBase(x.amount, x.currency, config, x.date, x.fxRate));
+  const byCatReentry = groupSum(reentryTransfers, x=>x.category, x=>toBase(x.amount, x.currency, config, x.date, x.fxRate));
+  const byPay = groupSum(nlist, x=>x.pay, x=>toBase(x.amount, x.currency, config, x.date, x.fxRate));
 
   const topExp = topEntry(byCatExpense);
   const topInc = topEntry(byCatIncome);
@@ -99,11 +143,11 @@ export function refreshDash(state){
     <div class="box">
       <div class="label">Neto (base)</div>
       <div class="value">${fmtMoney(net, config.baseCurrency, config)}</div>
-      <div class="sub">${count} movimiento(s) • prom ${fmtMoney(avg, config.baseCurrency, config)}</div>
+      <div class="sub">${maskedValue(String(count))} movimiento(s) • prom ${fmtMoney(avg, config.baseCurrency, config)}</div>
     </div>
     <div class="box">
       <div class="label">Ahorro (%)</div>
-      <div class="value">${incTotal>0 ? ((net/incTotal)*100).toFixed(0)+"%" : "—"}</div>
+      <div class="value">${maskedValue(incTotal>0 ? ((net/incTotal)*100).toFixed(0)+"%" : "—")}</div>
       <div class="sub">${incTotal>0 ? `Neto / Ingresos${reentryTotal>0 ? " (sin reingresos)" : ""}` : "Sin ingresos"}</div>
     </div>
   `;
@@ -125,6 +169,18 @@ function renderCharts(state, list, month, byCatExpense, byCatIncome, byCatReentr
   const borderColor = css.getPropertyValue("--border").trim() || "rgba(255,255,255,.14)";
   const textColor = css.getPropertyValue("--text").trim() || "#e5e7eb";
 
+  if(isAnonymized()){
+    ["fallbackDaily", "fallbackMonthly", "fallbackCats", "fallbackMonthlyBreakdown", "fallbackPay"].forEach(id => {
+      el(id).style.display = "";
+      el(id).textContent = "Gráfico anonimizado.";
+    });
+
+    for(const k of Object.keys(state.charts)){
+      if(state.charts[k]){ state.charts[k].destroy(); state.charts[k] = null; }
+    }
+    return;
+  }
+
   const daysInMonth = (() => {
     const [y,m] = month.split("-").map(Number);
     return new Date(y, m, 0).getDate();
@@ -137,17 +193,23 @@ function renderCharts(state, list, month, byCatExpense, byCatIncome, byCatReentr
     if(!String(x.date||"").startsWith(month)) continue;
     const d = Number(String(x.date).slice(8,10));
     if(d>=1 && d<=daysInMonth){
-      const base = toBase(x.amount, x.currency, config, x.date);
+      const base = toBase(x.amount, x.currency, config, x.date, x.fxRate);
       if(isRegularIncome(x)) incByDay[d-1] += base;
       else if(x.type==="expense") expByDay[d-1] += base;
       else if(isReentryTransfer(x)) expByDay[d-1] -= base;
+
+      if(x.includeInNet === false){
+        if(isRegularIncome(x)) incByDay[d-1] -= base;
+        else if(x.type === "expense") expByDay[d-1] -= base;
+        else if(isReentryTransfer(x)) expByDay[d-1] += base;
+      }
     }
   }
   const netByDay = incByDay.map((v,i)=> v - expByDay[i]);
 
   const monthlyWindow = Number(el("dashMonthlyWindow").value || 6);
   const monthlyMetrics = buildMonthlyComparisonMetrics(state.tx, config, month, monthlyWindow);
-  const monthlyBreakdown = buildMonthlyBreakdownMetrics(state.tx, config, monthlyMetrics.months, el("dashAgg").value);
+  const monthlyBreakdown = buildMonthlyBreakdownMetrics(state.tx, config, monthlyMetrics.months, el("dashAgg").value, selectedBreakdownEntities(state));
 
   if(!hasChart){
     ["fallbackDaily", "fallbackMonthly", "fallbackCats", "fallbackMonthlyBreakdown", "fallbackPay"].forEach(id => {
@@ -251,7 +313,7 @@ function renderCharts(state, list, month, byCatExpense, byCatIncome, byCatReentr
   state.charts.cats = new Chart(el("chartCats"), {
     type: "doughnut",
     data: {
-      labels: catLabels,
+      labels: isAnonymized() ? catLabels.map(()=>"*") : catLabels,
       datasets: [{
         label: `Por categoría (${config.baseCurrency})`,
         data: catVals,
@@ -271,7 +333,8 @@ function renderCharts(state, list, month, byCatExpense, byCatIncome, byCatReentr
   });
 
   const breakdownTitle = el("dashAgg").value === "group" ? "Gastos por grupo (comparativa)" : "Gastos por categoría (comparativa)";
-  el("hMonthlyBreakdown").textContent = breakdownTitle;
+  const selectedName = selectedBreakdownEntities(state)[0] || "";
+  el("hMonthlyBreakdown").textContent = selectedName ? `${breakdownTitle}: ${selectedName}` : breakdownTitle;
   const breakdownPalette = buildPalette(monthlyBreakdown.labels.length, "expense");
   state.charts.monthlyBreakdown = new Chart(el("chartMonthlyBreakdown"), {
     type: "bar",
@@ -301,29 +364,31 @@ function renderCharts(state, list, month, byCatExpense, byCatIncome, byCatReentr
     }
   });
 
-  const payLabels = byPay.map(x=>x.key);
-  const payVals = byPay.map(x=>Number(x.value.toFixed(2)));
+  const payTop = byPay.slice(0, 10);
+  const payLabels = payTop.map(x=>x.key);
+  const payVals = payTop.map(x=>Number(x.value.toFixed(2)));
   const payPalette = buildPalette(payVals.length, "pay");
 
   state.charts.pay = new Chart(el("chartPay"), {
     type: "bar",
     data: {
-      labels: payLabels,
+      labels: isAnonymized() ? payLabels.map(()=>"*") : payLabels,
       datasets: [{
-        label: `Por medio/fuente (${config.baseCurrency})`,
+        label: `Top medios/fuentes (${config.baseCurrency})`,
         data: payVals,
         backgroundColor: payPalette,
         borderColor: payPalette,
         borderWidth: 1,
-        borderRadius: 8,
-        maxBarThickness: 44
+        borderRadius: 10,
+        maxBarThickness: 28
       }]
     },
     options: {
       responsive:true,
+      indexAxis: "y",
       plugins: {
         legend: { labels: { color:textColor } },
-        tooltip: { callbacks: { label: ctx => `${ctx.dataset.label}: ${fmtMoney(ctx.parsed.y || 0, config.baseCurrency, config)}` } }
+        tooltip: { callbacks: { label: ctx => `${ctx.dataset.label}: ${fmtMoney(ctx.parsed.x || 0, config.baseCurrency, config)}` } }
       },
       scales: {
         x: { grid: { color: borderColor }, ticks: { color: axisColor } },
@@ -348,7 +413,7 @@ function buildMonthlyComparisonMetrics(txList, config, month, monthsBack){
   for(const tx of txList){
     const txMonth = String(tx.date || "").slice(0, 7);
     if(!totals.has(txMonth)) continue;
-    const amountBase = toBase(Number(tx.amount) || 0, tx.currency, config, tx.date);
+    const amountBase = toBase(Number(tx.amount) || 0, tx.currency, config, tx.date, tx.fxRate);
     if(isRegularIncome(tx)) totals.get(txMonth).income += amountBase;
     if(tx.type === "expense") totals.get(txMonth).expense += amountBase;
   }
@@ -360,7 +425,7 @@ function buildMonthlyComparisonMetrics(txList, config, month, monthsBack){
   return { months, income, expense, net };
 }
 
-function buildMonthlyBreakdownMetrics(txList, config, monthKeys, aggMode){
+function buildMonthlyBreakdownMetrics(txList, config, monthKeys, aggMode, selectedEntities = []){
   const monthMap = new Map(monthKeys.map(key => [key, new Map()]));
 
   for(const tx of txList){
@@ -369,7 +434,7 @@ function buildMonthlyBreakdownMetrics(txList, config, monthKeys, aggMode){
     const bucket = monthMap.get(month);
     if(!bucket) continue;
     const key = expenseKeyFromAgg(tx, config, aggMode);
-    bucket.set(key, (bucket.get(key) || 0) + toBase(Number(tx.amount) || 0, tx.currency, config, tx.date));
+    bucket.set(key, (bucket.get(key) || 0) + toBase(Number(tx.amount) || 0, tx.currency, config, tx.date, tx.fxRate));
   }
 
   const labels = Array.from(monthMap.values())
@@ -379,9 +444,10 @@ function buildMonthlyBreakdownMetrics(txList, config, monthKeys, aggMode){
       return acc;
     }, new Map());
 
+  const selectedSet = new Set((selectedEntities || []).filter(Boolean));
   const topLabels = Array.from(labels.entries())
+    .filter(([key])=> selectedSet.size ? selectedSet.has(key) : true)
     .sort((a,b)=> b[1] - a[1])
-    .slice(0, 5)
     .map(([key])=> key);
 
   const series = monthKeys.map(month => {
@@ -447,7 +513,7 @@ function renderBudgetStatus(state, expenses, monthKey, expenseAgg){
           </div>
           <div style="text-align:right">
             <span class="badge ${badge}">${label}</span>
-            <div class="muted" style="margin-top:6px; font-family:var(--mono)">${(r.pct||0).toFixed(0)}%</div>
+            <div class="muted" style="margin-top:6px; font-family:var(--mono)">${maskedValue((r.pct||0).toFixed(0)+"%")}</div>
           </div>
         </div>
       `;
@@ -458,7 +524,7 @@ function buildCategoryBudgetRows(expenses, config, monthBudget, monthKey){
   const byCat = groupSum(
     expenses.filter(x=> String(x.date||"").startsWith(monthKey)),
     x=>x.category,
-    x=>toBase(x.amount, x.currency, config, x.date)
+    x=>toBase(x.amount, x.currency, config, x.date, x.fxRate)
   );
 
   return (config.expenseCategories||[]).map(cat=>{
@@ -477,7 +543,7 @@ function buildGroupBudgetRows(expenses, config, monthBudget, monthKey){
   const byGroup = groupSum(
     expenses.filter(x=> String(x.date||"").startsWith(monthKey)),
     x=>expenseKeyFromAgg(x, config, "group"),
-    x=>toBase(x.amount, x.currency, config, x.date)
+    x=>toBase(x.amount, x.currency, config, x.date, x.fxRate)
   );
 
   const groups = (config.expenseGroups || []).filter(Boolean);
@@ -502,11 +568,11 @@ function renderCategoryTable(state, expenses, byCatExpense, monthKey, expenseAgg
     el("tbodyCats").innerHTML = byCatExpense.map(r=>{
       const limit = Number(monthBudget[groupBudgetKey(r.key)] || 0);
       const pct = limit>0 ? (r.value/limit)*100 : null;
-      const pctStr = pct==null ? "—" : pct.toFixed(0)+"%";
+      const pctStr = pct==null ? "—" : maskedValue(pct.toFixed(0)+"%");
       const flag = pct==null ? "" : (pct>=100 ? "danger" : pct>=80 ? "warn" : "ok");
       return `
         <tr>
-          <td style="font-weight:900">${escapeHTML(r.key)}</td>
+          <td style="font-weight:900">${isAnonymized() ? "*" : escapeHTML(r.key)}</td>
           <td>${fmtMoney(r.value, config.baseCurrency, config)}</td>
           <td>${limit>0 ? fmtMoney(limit, config.baseCurrency, config) : "<span class='muted'>—</span>"}</td>
           <td>${pct==null ? "<span class='muted'>—</span>" : `<span class="badge ${flag}">${pctStr}</span>`}</td>
@@ -521,7 +587,7 @@ function renderCategoryTable(state, expenses, byCatExpense, monthKey, expenseAgg
   const byCategory = groupSum(
     expenses.filter(x=> String(x.date||"").startsWith(monthKey)),
     x=>x.category,
-    x=>toBase(x.amount, x.currency, config, x.date)
+    x=>toBase(x.amount, x.currency, config, x.date, x.fxRate)
   );
 
   const set = new Set([...byCategory.map(x=>x.key), ...Object.keys(monthBudget)]);
@@ -533,7 +599,7 @@ function renderCategoryTable(state, expenses, byCatExpense, monthKey, expenseAgg
   }).sort((a,b)=> (b.spent - a.spent));
 
   el("tbodyCats").innerHTML = rows.map(r=>{
-    const pctStr = r.pct==null ? "—" : r.pct.toFixed(0)+"%";
+    const pctStr = r.pct==null ? "—" : maskedValue(r.pct.toFixed(0)+"%");
     const flag = r.pct==null ? "" : (r.pct>=100 ? "danger" : r.pct>=80 ? "warn" : "ok");
     return `
       <tr>
