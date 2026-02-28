@@ -4,6 +4,7 @@ import { APP_VERSION, defaults } from "./constants.js";
 import { initTabs } from "./router.js";
 import { initIngreso } from "./ingreso.js";
 import { initDashboard } from "./dashboard.js";
+import { initAhorros } from "./ahorros.js";
 import { initConfig } from "./config.js";
 import { initExport } from "./export.js";
 import {
@@ -64,11 +65,13 @@ async function init(){
   initTabs(state);
   initIngreso(state);
   initDashboard(state);
+  initAhorros(state);
   initConfig(state);
   initExport(state);
 
   state.bus.emit("dashboard:refresh");
   state.bus.emit("ingreso:refresh");
+  state.bus.emit("ahorros:refresh");
   state.bus.emit("config:refresh");
 
   if(!modeInfo.connected) toast("Sin carpeta conectada. Usá “Elegir carpeta de datos” o modo manual.", "warn");
