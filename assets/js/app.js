@@ -6,72 +6,43 @@ import { initIngreso } from "./ingreso.js";
 import { initDashboard } from "./dashboard.js";
 import { initConfig } from "./config.js";
 import { initExport } from "./export.js";
-import {
-  getSettings,
-  listTransactions,
-  listBudgets,
-  syncBudgetMapFromRows,
-  ensureDirectusSession
-} from "./dataStore.js";
+import { getSettings, listTransactions, listBudgets, syncBudgetMapFromRows, bootstrapStorage, loadCurrentMonth } from "./dataStore.js";
 
-function makeBus(){
-  return {
-    emit(name, detail){ document.dispatchEvent(new CustomEvent(name, { detail })); },
-    on(name, fn){ document.addEventListener(name, fn); return ()=> document.removeEventListener(name, fn); }
-  };
-}
+function makeBus(){ return { emit(name, detail){ document.dispatchEvent(new CustomEvent(name, { detail })); }, on(name, fn){ document.addEventListener(name, fn); return ()=> document.removeEventListener(name, fn); } }; }
 
 const state = {
-  bus: makeBus(),
-  config: null,
-  tx: [],
-  budgetRows: [],
-  budgets: {},
-  page: 1,
-  PAGE_SIZE: 12,
+  bus: makeBus(), config: null, tx: [], budgetRows: [], budgets: {}, page: 1, PAGE_SIZE: 12,
   charts: { daily:null, monthly:null, cats:null, monthlyBreakdown:null, pay:null },
-  directus: { connected:false, baseUrl:"https://directus.drperez86.com", user:null, role:null, permissions:[], abilities:{} }
+  activeMonth: null, loadedComparisonMonths: [], reloadTransactions: ()=> listTransactions()
 };
 
 async function init(){
   setTheme(getTheme());
+  const modeInfo = await bootstrapStorage();
+  state.activeMonth = await loadCurrentMonth();
   await safelyLoadData();
 
   el("fDate").value = todayISO();
-  el("dashMonth").value = monthISO();
-  el("budgetMonth").value = monthISO();
+  el("dashMonth").value = state.activeMonth || monthISO();
+  el("budgetMonth").value = state.activeMonth || monthISO();
   el("budgetMode").value = "category";
-  el("pillMonth").textContent = "Mes: " + monthISO();
+  el("pillMonth").textContent = "Mes activo: " + state.activeMonth;
+  if(el("pillMode")) el("pillMode").textContent = `Modo: ${modeInfo.mode === "local-folder" ? "Local (carpeta)" : "Manual"}`;
 
-  const expectedVersion = String(window.__APP_VERSION__ || "").trim();
   console.info(`[App] APP_VERSION=${APP_VERSION}`);
-
   const versionBadge = el("appVersionBadge");
   if(versionBadge) versionBadge.textContent = `Versión ${APP_VERSION}`;
 
-  if(expectedVersion && expectedVersion !== APP_VERSION){
-    toast("Estás viendo assets cacheados", "warn");
-  }
-
-  fillSelect(el("fCurrency"), state.config.currencies);
-  fillSelect(el("eCurrency"), state.config.currencies);
-  fillSelect(el("baseCurrency"), state.config.currencies);
-
-  fillSelect(el("ePay"), ["Tarjeta","Débito","Efectivo","Transferencia","Reintegro","Reingreso por transferencia","Cripto","Otro"]);
-
-  el("numLocale").value = state.config.locale;
+  fillSelect(el("fCurrency"), [state.config.baseCurrency]);
+  fillSelect(el("eCurrency"), [state.config.baseCurrency]);
+  fillSelect(el("baseCurrency"), [state.config.baseCurrency]);
+  fillSelect(el("ePay"), ["Tarjeta","Débito","Efectivo","Transferencia","Otro"]);
+  el("numLocale").value = state.config.locale || "es-AR";
   el("baseCurrency").value = state.config.baseCurrency;
 
-  initTabs(state);
-  initIngreso(state);
-  initDashboard(state);
-  initConfig(state);
-  initExport(state);
-
-  state.bus.emit("dashboard:refresh");
-  state.bus.emit("ingreso:refresh");
-  state.bus.emit("config:refresh");
-  state.bus.emit("directus:changed");
+  initTabs(state); initIngreso(state); initDashboard(state); initConfig(state); initExport(state);
+  state.bus.emit("dashboard:refresh"); state.bus.emit("ingreso:refresh"); state.bus.emit("config:refresh");
+  if(!modeInfo.fsSupported) toast("Modo carpeta requiere Chrome/Edge moderno. Usá modo manual.", "warn");
 }
 
 async function safelyLoadData(){
@@ -80,28 +51,8 @@ async function safelyLoadData(){
   state.tx = await safelyLoad("movimientos", () => listTransactions(), []);
   state.budgetRows = await safelyLoad("presupuestos", () => listBudgets(), []);
   state.budgets = syncBudgetMapFromRows(state.budgetRows);
-  const dxSession = await safelyLoad("sesión Directus", () => ensureDirectusSession(), { ok:true, connected:false, permissions:[], abilities:{} });
-  state.directus = {
-    connected: Boolean(dxSession?.connected),
-    baseUrl: dxSession?.baseUrl || "https://directus.drperez86.com",
-    user: dxSession?.user || null,
-    role: dxSession?.role || null,
-    permissions: dxSession?.permissions || [],
-    abilities: dxSession?.abilities || {},
-    access_token: dxSession?.access_token || "",
-    refresh_token: dxSession?.refresh_token || "",
-    expires: Number(dxSession?.expires || 0),
-    lastError: dxSession?.ok === false ? (dxSession?.error || null) : null
-  };
 }
 
-async function safelyLoad(label, fn, fallback){
-  try{ return await fn(); }
-  catch(err){
-    console.error(`Error al cargar ${label}`, err);
-    toast(err.userMessage || `No se pudo cargar ${label}. Se usaron valores por defecto.`, "warn");
-    return fallback;
-  }
-}
+async function safelyLoad(label, fn, fallback){ try{ return await fn(); } catch(err){ console.error(`Error al cargar ${label}`, err); toast(`No se pudo cargar ${label}.`, "warn"); return fallback; } }
 
 init();
