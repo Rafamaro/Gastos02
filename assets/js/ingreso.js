@@ -1,5 +1,5 @@
 import { el, fillSelect, fmtMoney, toBase, safeTags, normalizeTx, sortTx, todayISO, monthISO, toast, escapeHTML } from "./utils.js";
-import { createTransaction, updateTransaction, deleteTransaction, listCategories, listTransactions, listBudgets, syncBudgetMapFromRows } from "./dataStore.js?v=1772015862292";
+import { createTransaction, updateTransaction, deleteTransaction, listCategories, listTransactions, listBudgets, syncBudgetMapFromRows } from "./dataStore.js";
 export function initIngreso(state){
   // listeners de refresco externo
   state.bus.on("config:changed", async ()=> {
@@ -121,30 +121,6 @@ async function loadCategoryOptions(state, type){
       ? (config.reentryCategories || ["Reintegro"])
       : (config.expenseCategories || []);
 
-  if(state.directus?.connected){
-    const rows = await listCategories({ type });
-    const byName = new Map(
-      rows
-        .filter(row => row?.id && row?.name)
-        .map(row => [String(row.name).trim().toLowerCase(), row])
-    );
-
-    const options = configuredNames.map(name => {
-      const cleanName = String(name || "").trim();
-      const matched = byName.get(cleanName.toLowerCase());
-      return { value: matched?.id || cleanName, label: cleanName };
-    }).filter(opt => opt.label);
-
-    for(const row of rows || []){
-      if(type === "reentry") continue;
-      const cleanName = String(row?.name || "").trim();
-      if(!cleanName) continue;
-      if(options.some(opt => opt.label.toLowerCase() === cleanName.toLowerCase())) continue;
-      options.push({ value: row.id, label: cleanName });
-    }
-
-    if(options.length) return options;
-  }
 
   const fallback = configuredNames.length ? configuredNames : ["Otros"];
   return fallback.map(name => ({ value: name, label: name }));
@@ -218,8 +194,7 @@ export function clearForm(state){
   toast("Formulario limpio");
 }
 
-async function reloadFromDirectusAndRender(state){
-  if(!state.directus?.connected) return;
+async function reloadFromStorageAndRender(state){
   state.tx = await listTransactions();
   state.budgetRows = await listBudgets();
   state.budgets = syncBudgetMapFromRows(state.budgetRows);
@@ -266,12 +241,7 @@ export async function addTx(state){
     toast("Guardado ✅");
     clearForm(state);
     state.page = 1;
-    await reloadFromDirectusAndRender(state);
-    if(!state.directus?.connected){
-      renderList(state);
-      state.bus.emit("tx:changed");
-      state.bus.emit("dashboard:refresh");
-    }
+    await reloadFromStorageAndRender(state);
   }catch(err){
     toast(err?.userMessage || err?.message || "No se pudo guardar el movimiento.", "danger");
   }
@@ -438,12 +408,7 @@ export async function saveEdit(state){
     el("dlgEdit").close();
 
     toast("Cambios guardados ✅");
-    await reloadFromDirectusAndRender(state);
-    if(!state.directus?.connected){
-      renderList(state);
-      state.bus.emit("tx:changed");
-      state.bus.emit("dashboard:refresh");
-    }
+    await reloadFromStorageAndRender(state);
   }catch(err){
     toast(err?.userMessage || err?.message || "No se pudo editar el movimiento.", "danger");
   }
@@ -462,12 +427,7 @@ export async function deleteEdit(state){
     el("dlgEdit").close();
 
     toast("Eliminado", "warn");
-    await reloadFromDirectusAndRender(state);
-    if(!state.directus?.connected){
-      renderList(state);
-      state.bus.emit("tx:changed");
-      state.bus.emit("dashboard:refresh");
-    }
+    await reloadFromStorageAndRender(state);
   }catch(err){
     toast(err?.userMessage || err?.message || "No se pudo borrar el movimiento.", "danger");
   }

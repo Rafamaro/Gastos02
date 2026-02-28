@@ -1,16 +1,7 @@
-export const APP_VERSION = "1.43";
-// Constantes y defaults (v2)
+export const APP_VERSION = "2.0.0";
+
 export const LS = {
-  TX: "mov_tx_v2",
-  CFG: "mov_cfg_v2",
-  BUD: "mov_bud_v2",
-  THEME: "mov_theme_v2",
-  DX_AUTH: "dx_auth_v1",
-  DX_URL: "dx_url_v1",
-  // compat old
-  OLD_EXP: "gastos_expenses_v1",
-  OLD_CFG: "gastos_config_v1",
-  OLD_BUD: "gastos_budgets_v1"
+  THEME: "mov_theme_v2"
 };
 
 export const defaults = {
@@ -22,33 +13,20 @@ export const defaults = {
     "Ocio", "Impuestos", "Ropa", "Trabajo", "Otros"
   ],
   incomeCategories: [
-    "Salario", "Honorarios", "Reembolso", "Reintegro", "Inversiones", "Ventas", "Otros ingresos"
+    "Salario", "Honorarios", "Reembolso", "Inversiones", "Ventas", "Otros ingresos"
   ],
-  reentryCategories: [
-    "Reintegro", "Devoluciones", "Reembolso de gasto"
-  ],
-  reentryCategories: [
-    "Reintegro", "Devoluciones", "Reembolso de gasto"
-  ],
-  reentryCategories: [
-    "Reintegro", "Devoluciones", "Reembolso de gasto"
-  ],
-  reentryCategories: [
-    "Reintegro", "Devoluciones", "Reembolso de gasto"
-  ],
-  reentryCategories: [
-    "Reintegro", "Devoluciones", "Reembolso de gasto"
-  ],
-  reentryCategories: [
-    "Reintegro", "Devoluciones", "Reembolso de gasto"
-  ],
-  reentryCategories: [
-    "Reintegro", "Devoluciones", "Reembolso de gasto"
-  ],
-  reentryCategories: [
-    "Reintegro", "Devoluciones", "Reembolso de gasto"
-  ],
+  reentryCategories: ["Reintegro", "Devoluciones", "Reembolso de gasto"],
   expenseGroups: ["Esenciales", "Finanzas", "Estilo de vida", "Trabajo"],
   expenseCategoryGroups: {},
-  ratesToBase: { "ARS": 1, "USD": 1050, "EUR": 1150 } // ejemplo
+  ratesToBase: { ARS: 1, USD: 1050, EUR: 1150 },
+  budgets: {},
+
+  // compat nuevo esquema
+  version: 1,
+  currency: "ARS",
+  categories: [{ id: "comida", name: "Comida", groupId: "esenciales" }],
+  groups: [{ id: "esenciales", name: "Esenciales" }],
+  payment_methods: [{ id: "tarjeta", name: "Tarjeta" }, { id: "efectivo", name: "Efectivo" }],
+  tags: [],
+  ui: { defaultView: "month" }
 };
