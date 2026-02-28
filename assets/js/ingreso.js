@@ -1,4 +1,4 @@
-import { el, fillSelect, fmtMoney, toBase, safeTags, normalizeTx, sortTx, todayISO, monthISO, toast, escapeHTML } from "./utils.js";
+import { el, fillSelect, fmtMoney, toBase, safeTags, normalizeTx, sortTx, todayISO, monthISO, toast, escapeHTML, maskedValue, isAnonymized } from "./utils.js";
 import { createTransaction, updateTransaction, deleteTransaction, listCategories, listTransactions, listBudgets, syncBudgetMapFromRows } from "./dataStore.js";
 export function initIngreso(state){
   // listeners de refresco externo
@@ -319,8 +319,10 @@ export function renderList(state){
     <tr><td colspan="4" class="muted">No hay movimientos con estos filtros.</td></tr>
   `;
 
-  el("countInfo").textContent = `${total} movimiento(s) • mostrando ${view.length} en página ${state.page}/${maxPage}`;
-  el("pageInfo").textContent = `Página ${state.page} / ${maxPage}`;
+  el("countInfo").textContent = isAnonymized()
+    ? "* movimiento(s) • mostrando * en página */*"
+    : `${total} movimiento(s) • mostrando ${view.length} en página ${state.page}/${maxPage}`;
+  el("pageInfo").textContent = isAnonymized() ? "Página * / *" : `Página ${state.page} / ${maxPage}`;
 
   el("btnPrevPage").disabled = state.page <= 1;
   el("btnNextPage").disabled = state.page >= maxPage;
@@ -329,7 +331,7 @@ export function renderList(state){
 
 function rowHTML(x, config){
   const tags = (x.tags||[]).slice(0,6).map(t=>`<span class="tag">#${escapeHTML(t)}</span>`).join("");
-  const base = toBase(x.amount, x.currency, config, x.date);
+  const base = toBase(x.amount, x.currency, config, x.date, x.fxRate);
   const isReentry = x.type==="income" && String(x.pay||"").trim().toLowerCase()==="reintegro";
   const sign = x.type==="expense" ? "−" : "+";
   const badge = isReentry
@@ -342,18 +344,18 @@ function rowHTML(x, config){
     ? fmtMoney(x.amount, x.currency, config)
     : `${fmtMoney(x.amount, x.currency, config)} <span class="muted">(${fmtMoney(base, config.baseCurrency, config)} base)</span>`;
 
-  const money = `<span style="font-weight:900">${sign} ${moneyRaw}</span>`;
+  const money = `<span style="font-weight:900">${isAnonymized() ? "*" : `${sign} ${moneyRaw}`}</span>`;
 
   return `
     <tr>
-      <td class="mono">${escapeHTML(x.date)}</td>
+      <td class="mono">${isAnonymized() ? "*" : escapeHTML(x.date)}</td>
       <td>
         <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center">
           ${badge}
-          <div style="font-weight:900">${escapeHTML(x.desc || "—")}</div>
+          <div style="font-weight:900">${isAnonymized() ? "*" : escapeHTML(x.desc || "—")}</div>
         </div>
         <div class="muted" style="margin-top:3px">
-          ${escapeHTML(x.category)} · ${escapeHTML(x.pay)} · ${escapeHTML(x.vendor || "—")}
+          ${isAnonymized() ? "*" : `${escapeHTML(x.category)} · ${escapeHTML(x.pay)} · ${escapeHTML(x.vendor || "—")}`}
         </div>
         <div style="margin-top:6px">${tags}</div>
       </td>
