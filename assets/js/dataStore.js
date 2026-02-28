@@ -124,12 +124,14 @@ function mergeConfigValues(baseCfg = {}, incoming = {}){
   const base = normalizeLegacyConfig(baseCfg);
   const inc = incoming || {};
 
-  return {
+  const merged = {
     ...base,
     ...inc,
     baseCurrency: inc.baseCurrency || inc.currency || base.baseCurrency,
     locale: inc.locale || base.locale,
-    currencies: uniqueTrimmed([...(base.currencies || []), ...((inc.currencies || []).map(String))]),
+    currencies: Array.isArray(inc.currencies)
+      ? uniqueTrimmed(inc.currencies.map(String).map(v=>v.toUpperCase()))
+      : uniqueTrimmed(base.currencies || []),
     expenseCategories: uniqueTrimmed([...(base.expenseCategories || []), ...((inc.expenseCategories || []).map(String))]),
     incomeCategories: uniqueTrimmed([...(base.incomeCategories || []), ...((inc.incomeCategories || []).map(String))]),
     reentryCategories: uniqueTrimmed([...(base.reentryCategories || []), ...((inc.reentryCategories || []).map(String))]),
@@ -139,6 +141,10 @@ function mergeConfigValues(baseCfg = {}, incoming = {}){
     ratesByMonth: { ...(base.ratesByMonth || {}), ...(inc.ratesByMonth || {}) },
     budgets: { ...(base.budgets || {}), ...(inc.budgets || {}) }
   };
+
+  if(!merged.currencies.includes(merged.baseCurrency)) merged.currencies.unshift(merged.baseCurrency);
+
+  return merged;
 }
 
 function emptyMonth(monthKey){
@@ -280,6 +286,8 @@ function txFromMovement(mov, month){
     notes: mov.note || "",
     desc: mov.note || "",
     group: mov.groupId || "",
+    fxRate: Number(mov.exchangeRate || mov.fxRate) || null,
+    includeInNet: mov.includeInNet !== false,
     month
   };
 }
@@ -296,7 +304,9 @@ function movementFromTx(tx){
     paymentMethodId: tx.pay || null,
     vendor: tx.vendor || "",
     note: tx.notes || tx.desc || "",
-    tags: tx.tags || []
+    tags: tx.tags || [],
+    exchangeRate: Number(tx.fxRate) > 0 ? Number(tx.fxRate) : null,
+    includeInNet: tx.includeInNet !== false
   };
 }
 
