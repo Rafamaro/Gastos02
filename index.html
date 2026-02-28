@@ -360,7 +360,6 @@
         </div>
 
         <div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:12px">
-          <button class="btn primary" id="btnSaveConfig"><span aria-hidden="true">✅</span> Guardar config</button>
           <button class="btn" id="btnResetConfig"><span aria-hidden="true">♻️</span> Restaurar defaults</button>
         </div>
 
@@ -372,6 +371,7 @@
         <div class="hint">Modo carpeta usa File System Access API (Chrome/Edge). Si no está disponible, usá el modo manual.</div>
         <div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:12px">
           <button class="btn primary" id="btnChooseFolder">Elegir carpeta de datos</button>
+          <button class="btn primary" id="btnSaveConfig"><span aria-hidden="true">✅</span> Guardar configuración</button>
           <label class="btn" style="cursor:pointer">Importar configuración (JSON)
             <input id="importConfigFile" type="file" accept="application/json" style="display:none" />
           </label>
@@ -541,7 +541,7 @@
   </script>
 
   <script>
-    window.__APP_VERSION__ = "2.11.0";
+    window.__APP_VERSION__ = "2.12";
   </script>
   <script type="module" src="/assets/js/app.js"></script>
 </body>
