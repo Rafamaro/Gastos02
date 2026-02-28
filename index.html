@@ -28,6 +28,7 @@
       </div>
 
       <div class="top-actions">
+        <span class="pill" id="pillMode">Modo: --</span>
         <span class="pill" id="pillMonth"></span>
         <button class="btn small" id="btnTheme" title="Cambiar tema"><span aria-hidden="true">🌓</span> Tema</button>
         <button class="btn small" id="btnExport" title="Exportar JSON"><span aria-hidden="true">⬇️</span> Exportar</button>
@@ -367,43 +368,27 @@
 
 
       <div class="card">
-        <h2>Directus</h2>
-        <div class="hint">Conectá con usuarios existentes en Directus usando la API raíz (sin <code>/admin</code>).</div>
-
-        <div class="row" style="margin-top:10px">
-          <div>
-            <label>Directus URL</label>
-            <input type="url" id="dxUrl" placeholder="https://directus.drperez86.com" value="https://directus.drperez86.com" />
-          </div>
-          <div>
-            <label>Email</label>
-            <input type="email" id="dxEmail" placeholder="usuario@dominio.com" />
-          </div>
-        </div>
-
-        <div class="row" style="margin-top:10px">
-          <div>
-            <label>Password</label>
-            <input type="password" id="dxPass" placeholder="••••••••" />
-          </div>
-          <div>
-            <label>OTP (opcional)</label>
-            <input type="text" id="dxOtp" placeholder="Código 2FA" />
-          </div>
-        </div>
-
+        <h2>Almacenamiento local</h2>
+        <div class="hint">Modo carpeta usa File System Access API (Chrome/Edge). Si no está disponible, usá el modo manual.</div>
         <div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:12px">
-          <button class="btn" id="btnDxPing">Probar conexión</button>
-          <button class="btn primary" id="btnDxLogin">Conectar</button>
-          <button class="btn" id="btnDxLogout">Desconectar</button>
-          <button class="btn" id="btnDxReloadPerms">Recargar permisos</button>
+          <button class="btn primary" id="btnChooseFolder">Elegir carpeta de datos</button>
+          <label class="btn" style="cursor:pointer">Importar configuración (JSON)
+            <input id="importConfigFile" type="file" accept="application/json" style="display:none" />
+          </label>
+          <label class="btn" style="cursor:pointer">Importar mes (JSON)
+            <input id="importMonthFile" type="file" accept="application/json" style="display:none" />
+          </label>
+          <button class="btn" id="btnExportMonth">Exportar mes (JSON)</button>
         </div>
-
         <div style="margin-top:12px">
-          <div><strong>Status:</strong> <span id="dxStatus">Desconectado</span></div>
-          <div><strong>Rol:</strong> <span id="dxRole">-</span></div>
-          <label style="margin-top:8px">Permisos efectivos (resumen)</label>
-          <pre id="dxPermsSummary" style="margin:8px 0 0; max-height:220px; overflow:auto; padding:10px; border:1px solid var(--line); border-radius:12px; background:var(--bg-soft);">Sin permisos cargados.</pre>
+          <div><strong>Modo:</strong> <span id="localMode">-</span></div>
+          <div><strong>Carpeta conectada:</strong> <span id="folderConnected">no</span></div>
+          <div><strong>Mes activo:</strong> <span id="activeMonthStatus">-</span></div>
+          <div><strong>Meses en comparación:</strong> <span id="comparisonStatus">ninguno</span></div>
+        </div>
+        <div style="margin-top:12px">
+          <label>Comparar meses previos</label>
+          <select id="cmpMonths" multiple style="min-height:120px"></select>
         </div>
       </div>
       <div class="card">
@@ -547,7 +532,7 @@
   </script>
 
   <script>
-    window.__APP_VERSION__ = "1.43";
+    window.__APP_VERSION__ = "2.0.0";
   </script>
   <script type="module" src="/assets/js/app.js"></script>
 </body>

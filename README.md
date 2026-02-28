@@ -1,70 +1,77 @@
-# Gastos02
+# Gastos02 (Local-first)
 
-Aplicación web (SPA) para registrar movimientos de ingresos/gastos, evaluarlos con dashboard y gestionar presupuestos mensuales.
+Gastos02 ahora funciona **100% local**, sin backend y sin Directus.
 
-## Funcionalidades
+## Versión
+- `APP_VERSION`: `2.0.0`.
 
-- Alta, edición y eliminación de movimientos.
-- Filtros por texto, tipo, categoría y rango de fechas.
-- Dashboard con KPIs, gráficos y estado de presupuestos.
-- Configuración de moneda base, tasas de cambio, categorías y grupos.
-- Exportación/Importación de JSON y exportación CSV.
-- Persistencia 100% local en navegador (`localStorage`) con migración de datos v1 a v2.
+## Modos de almacenamiento
 
-## Versionado
+### 1) Modo carpeta (recomendado)
+- Botón: **Elegir carpeta de datos**.
+- Usa File System Access API (`window.showDirectoryPicker`).
+- Recomendado: Chrome/Edge.
+- Estructura esperada dentro de la carpeta elegida:
 
-- La versión visible en UI se incrementa en cada cambio siguiendo el esquema `1.21`, `1.22`, `1.23`, etc.
-- La fuente de verdad es `APP_VERSION` en `assets/js/constants.js` y se refleja en el badge del header.
+```txt
+/config.json
+/YYYY-MM.json
+```
 
-## Estructura
+### 2) Modo manual (fallback)
+- Si la API de carpeta no está disponible:
+  - **Importar mes (JSON)**
+  - **Exportar mes (JSON)**
 
-- `index.html`: layout principal de vistas (Ingreso, Dashboard, Config).
-- `assets/js/dataStore.js`: capa de datos local (localStorage).
-- `assets/js/app.js`: inicialización del estado y módulos.
-- `assets/js/ingreso.js`: formulario, filtros y listado de movimientos.
-- `assets/js/dashboard.js`: KPIs, gráficos y tabla de presupuesto.
-- `assets/js/config.js`: configuración general y presupuestos.
-- `assets/js/export.js`: export/import, CSV, tema y reset.
-- `assets/js/storage.js`: lectura/escritura en `localStorage` + migraciones.
-- `assets/js/router.js`: navegación entre tabs.
+## Formato `config.json`
 
-## Ejecutar localmente
+```json
+{
+  "version": 1,
+  "currency": "ARS",
+  "categories": [{ "id": "comida", "name": "Comida", "groupId": "hogar" }],
+  "groups": [{ "id": "hogar", "name": "Hogar" }],
+  "payment_methods": [{ "id": "tarjeta", "name": "Tarjeta" }],
+  "tags": [],
+  "ui": { "defaultView": "month" }
+}
+```
 
-No requiere build. Abrí `index.html` en tu navegador o levantá un servidor estático.
+## Formato mensual `YYYY-MM.json`
+
+```json
+{
+  "version": 1,
+  "month": "2026-03",
+  "currency": "ARS",
+  "movements": [
+    {
+      "id": "uuid",
+      "date": "2026-03-10",
+      "type": "expense",
+      "amount": 12500,
+      "categoryId": "comida",
+      "groupId": "hogar",
+      "paymentMethodId": "tarjeta",
+      "note": "texto",
+      "tags": ["super"]
+    }
+  ]
+}
+```
+
+> `amount` se guarda como **integer** (sin decimales).
+
+## Flujo de carga
+- Al iniciar:
+  1. Lee/crea `config.json`.
+  2. Determina mes vigente en timezone `America/Argentina/Buenos_Aires`.
+  3. Lee/crea solo `YYYY-MM.json` del mes vigente.
+- Meses previos se cargan únicamente al usar **Comparar meses previos**.
+
+## Desarrollo
 
 ```bash
-python3 -m http.server 8080
+npm install
+npm run dev
 ```
-
-Luego visitá:
-
-```text
-http://localhost:8080
-```
-
-## Validación manual sugerida
-
-1. Crear grupo/categoría/movimiento/presupuesto.
-2. Cambiar moneda base y locale.
-3. Recargar página y confirmar persistencia.
-
-## Bootstrap de Directus (idempotente)
-
-Variables de entorno requeridas para correr el bootstrap desde backend/script:
-
-- `DIRECTUS_URL`
-- `DIRECTUS_ADMIN_TOKEN` (recomendado)
-- o bien `DIRECTUS_ADMIN_EMAIL` + `DIRECTUS_ADMIN_PASSWORD`
-
-Ejecución:
-
-```bash
-npm run bootstrap:directus
-```
-
-Notas de seguridad:
-
-- **Nunca** expongas `DIRECTUS_ADMIN_TOKEN` en el frontend.
-- Configurá credenciales admin solo en variables de entorno del server/Coolify o en `.env` local no versionado.
-- El admin funcional de la app debe autenticarse con login normal de Directus y rol `app_admin`.
-
