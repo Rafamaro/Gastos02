@@ -70,7 +70,7 @@ export function initDashboard(state){
   el("dashMonth").addEventListener("change", ()=> refreshDash(state));
   el("dashScope").addEventListener("change", ()=> refreshDash(state));
   el("dashCatsMode").addEventListener("change", ()=> refreshDash(state));
-  el("dashAgg").addEventListener("change", ()=> refreshDash(state));
+  el("dashAgg").addEventListener("change", ()=> { syncBreakdownEntityOptions(state); refreshDash(state); });
   el("dashMonthlyWindow").addEventListener("change", ()=> refreshDash(state));
   el("dashBreakdownCategories")?.addEventListener("change", ()=> refreshDash(state));
   el("dashBreakdownGroups")?.addEventListener("change", ()=> refreshDash(state));
@@ -333,8 +333,9 @@ function renderCharts(state, list, month, byCatExpense, byCatIncome, byCatReentr
     }
   });
 
+  const selectedCount = selectedBreakdownEntities(state).length;
   const breakdownTitle = el("dashAgg").value === "group" ? "Gastos por grupo (comparativa)" : "Gastos por categoría (comparativa)";
-  el("hMonthlyBreakdown").textContent = breakdownTitle;
+  el("hMonthlyBreakdown").textContent = `${breakdownTitle} · ${selectedCount} seleccionado(s)`;
   const breakdownPalette = buildPalette(monthlyBreakdown.labels.length, "expense");
   state.charts.monthlyBreakdown = new Chart(el("chartMonthlyBreakdown"), {
     type: "bar",
