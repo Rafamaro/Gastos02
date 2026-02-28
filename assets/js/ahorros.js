@@ -236,11 +236,11 @@ function renderFxDashboard(state, summary){
     </div>
   `;
 
-  if(typeof Chart === "undefined"){
+  if(typeof Chart === "undefined" || isAnonymized()){
     el("fxFallbackComposition").style.display = "block";
-    el("fxFallbackComposition").textContent = "No se pudo cargar Chart.js.";
+    el("fxFallbackComposition").textContent = typeof Chart === "undefined" ? "No se pudo cargar Chart.js." : "Gráfico anonimizado.";
     el("fxFallbackGrowth").style.display = "block";
-    el("fxFallbackGrowth").textContent = "No se pudo cargar Chart.js.";
+    el("fxFallbackGrowth").textContent = typeof Chart === "undefined" ? "No se pudo cargar Chart.js." : "Gráfico anonimizado.";
     destroyFxCharts(state);
     return;
   }

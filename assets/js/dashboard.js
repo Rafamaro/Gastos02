@@ -107,7 +107,7 @@ export function refreshDash(state){
     <div class="box">
       <div class="label">Neto (base)</div>
       <div class="value">${fmtMoney(net, config.baseCurrency, config)}</div>
-      <div class="sub">${count} movimiento(s) • prom ${fmtMoney(avg, config.baseCurrency, config)}</div>
+      <div class="sub">${maskedValue(String(count))} movimiento(s) • prom ${fmtMoney(avg, config.baseCurrency, config)}</div>
     </div>
     <div class="box">
       <div class="label">Ahorro (%)</div>
@@ -132,6 +132,18 @@ function renderCharts(state, list, month, byCatExpense, byCatIncome, byCatReentr
   const axisColor = css.getPropertyValue("--muted").trim() || "#9ca3af";
   const borderColor = css.getPropertyValue("--border").trim() || "rgba(255,255,255,.14)";
   const textColor = css.getPropertyValue("--text").trim() || "#e5e7eb";
+
+  if(isAnonymized()){
+    ["fallbackDaily", "fallbackMonthly", "fallbackCats", "fallbackMonthlyBreakdown", "fallbackPay"].forEach(id => {
+      el(id).style.display = "";
+      el(id).textContent = "Gráfico anonimizado.";
+    });
+
+    for(const k of Object.keys(state.charts)){
+      if(state.charts[k]){ state.charts[k].destroy(); state.charts[k] = null; }
+    }
+    return;
+  }
 
   const daysInMonth = (() => {
     const [y,m] = month.split("-").map(Number);
@@ -461,7 +473,7 @@ function renderBudgetStatus(state, expenses, monthKey, expenseAgg){
           </div>
           <div style="text-align:right">
             <span class="badge ${badge}">${label}</span>
-            <div class="muted" style="margin-top:6px; font-family:var(--mono)">${(r.pct||0).toFixed(0)}%</div>
+            <div class="muted" style="margin-top:6px; font-family:var(--mono)">${maskedValue((r.pct||0).toFixed(0)+"%")}</div>
           </div>
         </div>
       `;
@@ -516,11 +528,11 @@ function renderCategoryTable(state, expenses, byCatExpense, monthKey, expenseAgg
     el("tbodyCats").innerHTML = byCatExpense.map(r=>{
       const limit = Number(monthBudget[groupBudgetKey(r.key)] || 0);
       const pct = limit>0 ? (r.value/limit)*100 : null;
-      const pctStr = pct==null ? "—" : pct.toFixed(0)+"%";
+      const pctStr = pct==null ? "—" : maskedValue(pct.toFixed(0)+"%");
       const flag = pct==null ? "" : (pct>=100 ? "danger" : pct>=80 ? "warn" : "ok");
       return `
         <tr>
-          <td style="font-weight:900">${escapeHTML(r.key)}</td>
+          <td style="font-weight:900">${isAnonymized() ? "*" : escapeHTML(r.key)}</td>
           <td>${fmtMoney(r.value, config.baseCurrency, config)}</td>
           <td>${limit>0 ? fmtMoney(limit, config.baseCurrency, config) : "<span class='muted'>—</span>"}</td>
           <td>${pct==null ? "<span class='muted'>—</span>" : `<span class="badge ${flag}">${pctStr}</span>`}</td>
@@ -547,7 +559,7 @@ function renderCategoryTable(state, expenses, byCatExpense, monthKey, expenseAgg
   }).sort((a,b)=> (b.spent - a.spent));
 
   el("tbodyCats").innerHTML = rows.map(r=>{
-    const pctStr = r.pct==null ? "—" : r.pct.toFixed(0)+"%";
+    const pctStr = r.pct==null ? "—" : maskedValue(r.pct.toFixed(0)+"%");
     const flag = r.pct==null ? "" : (r.pct>=100 ? "danger" : r.pct>=80 ? "warn" : "ok");
     return `
       <tr>
