@@ -3,7 +3,7 @@
 Gastos02 ahora funciona **100% local**, sin backend y sin Directus.
 
 ## Versión
-- `APP_VERSION`: `2.1.0`.
+- `APP_VERSION`: `2.11.0`.
 
 ## Modos de almacenamiento
 
