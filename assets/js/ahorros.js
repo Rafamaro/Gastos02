@@ -1,7 +1,7 @@
-import { el, monthISO, toast, toBase, resolveRate, fmtMoney } from "./utils.js";
+import { el, monthISO, toast, toBase, resolveRate, fmtMoney, isAnonymized, maskedValue } from "./utils.js";
 import { createTransaction, deleteTransaction, listTransactions, updateTransaction, listAvailableMonths, getMonth } from "./dataStore.js";
 
-const FX_CURRENCIES = ["USD", "EUR", "COP", "USDT", "USDC", "TUSD", "DJED"];
+const FX_CURRENCIES = ["USD", "EUR", "COP", "USDT", "USDC", "TUSD", "DJED", "DAI"];
 const BUY_CATEGORY = "Compra de divisas";
 const SELL_CATEGORY = "Venta de divisas";
 
@@ -73,6 +73,7 @@ async function saveFxOperation(state){
   state.bus.emit("tx:changed");
   state.bus.emit("ingreso:refresh");
   state.bus.emit("dashboard:refresh");
+  clearFxForm(state);
   await renderAll(state);
 }
 
@@ -91,6 +92,7 @@ async function toggleIncludeInNet(state, id, checked){
   state.tx = await listTransactions();
   state.bus.emit("tx:changed");
   state.bus.emit("dashboard:refresh");
+  clearFxForm(state);
   await renderAll(state);
 }
 
@@ -115,8 +117,8 @@ function renderFxList(state){
         <td>${tx.date || "-"}</td>
         <td>${operationLabel(tx)}</td>
         <td>${tx.currency || "-"}</td>
-        <td>${Number(tx.amount || 0).toFixed(2)}</td>
-        <td>${usedRate.toFixed(4)}</td>
+        <td>${maskedValue(Number(tx.amount || 0).toFixed(2))}</td>
+        <td>${maskedValue(usedRate.toFixed(4))}</td>
         <td>${fmtMoney(baseAmount, state.config.baseCurrency, state.config)}</td>
         <td><input type="checkbox" data-fx-net="${tx.id}" ${tx.includeInNet !== false ? "checked" : ""} /></td>
         <td><button class="btn small danger" data-fx-del="${tx.id}">Eliminar</button></td>
@@ -150,19 +152,37 @@ async function buildHistoryFromAllMonths(state){
 function summarizeSavings(state, history){
   const cfg = state.config;
   const byCurrency = new Map();
-  const byMonth = new Map();
+  const byMonthUsd = new Map();
+
+  const monthNetBase = new Map();
 
   for(const tx of history){
+    const monthKey = String(tx.date || tx.month || "").slice(0,7);
+    if(monthKey && tx.includeInNet !== false){
+      const base = toBase(tx.amount, tx.currency, cfg, tx.date || monthKey, tx.fxRate);
+      const signed = tx.type === "expense" ? -base : base;
+      monthNetBase.set(monthKey, (monthNetBase.get(monthKey) || 0) + signed);
+    }
+
     if(!isTrackedFxTx(tx, cfg)) continue;
-    const sign = tx.type === "expense" ? 1 : -1; // compra suma stock, venta resta stock
+    const sign = tx.type === "expense" ? 1 : -1;
     const qty = sign * (Number(tx.amount) || 0);
     byCurrency.set(tx.currency, (byCurrency.get(tx.currency) || 0) + qty);
 
-    const monthKey = String(tx.date || tx.month || "").slice(0,7);
     if(!monthKey) continue;
     const usdRate = resolveRate(tx.currency, cfg, tx.date || monthKey, null) / resolveRate("USD", cfg, tx.date || monthKey, null);
     const usdDelta = qty * (Number.isFinite(usdRate) && usdRate > 0 ? usdRate : 1);
-    byMonth.set(monthKey, (byMonth.get(monthKey) || 0) + usdDelta);
+    byMonthUsd.set(monthKey, (byMonthUsd.get(monthKey) || 0) + usdDelta);
+  }
+
+  for(const [monthKey, netBase] of monthNetBase.entries()){
+    const arsRate = resolveRate("ARS", cfg, monthKey, null) || 1;
+    const usdRate = resolveRate("USD", cfg, monthKey, null) || 1;
+    const netArs = netBase / arsRate;
+    const netUsd = (netArs * arsRate) / usdRate;
+
+    byCurrency.set("ARS", (byCurrency.get("ARS") || 0) + netArs);
+    byMonthUsd.set(monthKey, (byMonthUsd.get(monthKey) || 0) + netUsd);
   }
 
   const rows = [...byCurrency.entries()].map(([currency, qty]) => {
@@ -170,8 +190,8 @@ function summarizeSavings(state, history){
     return { currency, qty, usdVal };
   }).sort((a,b)=> b.usdVal - a.usdVal);
 
-  const totalUsd = rows.reduce((s,r)=> s + r.usdVal, 0);
-  const monthSeries = [...byMonth.entries()].sort((a,b)=> a[0].localeCompare(b[0]));
+  const totalUsd = rows.reduce((s2,r)=> s2 + r.usdVal, 0);
+  const monthSeries = [...byMonthUsd.entries()].sort((a,b)=> a[0].localeCompare(b[0]));
   const cumulative = [];
   let acc = 0;
   for(const [m, delta] of monthSeries){
@@ -206,13 +226,13 @@ function renderFxDashboard(state, summary){
     </div>
     <div class="box">
       <div class="label">Crecimiento mensual</div>
-      <div class="value" style="color:${growthColor}">${growthPct.toFixed(2)}%</div>
+      <div class="value" style="color:${growthColor}">${maskedValue(growthPct.toFixed(2)+"%")}</div>
       <div class="sub">Comparación contra el mes anterior</div>
     </div>
     <div class="box">
       <div class="label">Composición principal</div>
-      <div class="value">${parts[0] ? parts[0].currency : "—"}</div>
-      <div class="sub">${parts[0] ? parts[0].pct.toFixed(1) + "%" : "Sin datos"}</div>
+      <div class="value">${isAnonymized() ? "*" : (parts[0] ? parts[0].currency : "—")}</div>
+      <div class="sub">${maskedValue(parts[0] ? parts[0].pct.toFixed(1) + "%" : "Sin datos")}</div>
     </div>
   `;
 
@@ -232,7 +252,7 @@ function renderFxDashboard(state, summary){
   state.fxCharts.composition = new Chart(el("fxChartComposition"), {
     type: "doughnut",
     data: {
-      labels: parts.map(p => `${p.currency} (${p.pct.toFixed(1)}%)`),
+      labels: parts.map(p => isAnonymized() ? "*" : `${p.currency} (${p.pct.toFixed(1)}%)`),
       datasets: [{ data: parts.map(p => Number(p.usdVal.toFixed(2))) }]
     },
     options: { responsive: true }

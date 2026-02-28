@@ -1,4 +1,4 @@
-import { el, fmtMoney, toBase, groupSum, topEntry, escapeHTML } from "./utils.js";
+import { el, fmtMoney, toBase, groupSum, topEntry, escapeHTML, maskedValue, isAnonymized } from "./utils.js";
 import { getFiltered } from "./ingreso.js";
 
 const REENTRY_TRANSFER_SOURCES = ["Reingreso por transferencia", "Reintegro", "Venta de divisas"];
@@ -111,7 +111,7 @@ export function refreshDash(state){
     </div>
     <div class="box">
       <div class="label">Ahorro (%)</div>
-      <div class="value">${incTotal>0 ? ((net/incTotal)*100).toFixed(0)+"%" : "—"}</div>
+      <div class="value">${maskedValue(incTotal>0 ? ((net/incTotal)*100).toFixed(0)+"%" : "—")}</div>
       <div class="sub">${incTotal>0 ? `Neto / Ingresos${reentryTotal>0 ? " (sin reingresos)" : ""}` : "Sin ingresos"}</div>
     </div>
   `;
@@ -265,7 +265,7 @@ function renderCharts(state, list, month, byCatExpense, byCatIncome, byCatReentr
   state.charts.cats = new Chart(el("chartCats"), {
     type: "doughnut",
     data: {
-      labels: catLabels,
+      labels: isAnonymized() ? catLabels.map(()=>"*") : catLabels,
       datasets: [{
         label: `Por categoría (${config.baseCurrency})`,
         data: catVals,
@@ -322,7 +322,7 @@ function renderCharts(state, list, month, byCatExpense, byCatIncome, byCatReentr
   state.charts.pay = new Chart(el("chartPay"), {
     type: "bar",
     data: {
-      labels: payLabels,
+      labels: isAnonymized() ? payLabels.map(()=>"*") : payLabels,
       datasets: [{
         label: `Por medio/fuente (${config.baseCurrency})`,
         data: payVals,

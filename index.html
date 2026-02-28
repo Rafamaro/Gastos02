@@ -31,6 +31,7 @@
         <span class="pill" id="pillMode">Modo: --</span>
         <span class="pill" id="pillMonth"></span>
         <button class="btn small" id="btnTheme" title="Cambiar tema"><span aria-hidden="true">🌓</span> Tema</button>
+        <button class="btn small" id="btnAnonymize" title="Anonimizar valores"><span id="anonymizeIcon" aria-hidden="true">👁️</span> <span id="anonymizeLabel">Visible</span></button>
         <button class="btn small" id="btnExport" title="Guardar JSON"><span aria-hidden="true">💾</span> Guardar</button>
         <label class="btn small" title="Importar JSON" style="cursor:pointer">
           <input id="fileImport" type="file" accept="application/json" style="display:none" />
@@ -410,6 +411,14 @@
 
         <div class="row" style="margin-top:10px">
           <div>
+            <label>Divisas habilitadas</label>
+            <div id="currenciesPicker"></div>
+            <div class="hint">Podés agregar o quitar divisas/criptomonedas para todos los movimientos.</div>
+          </div>
+        </div>
+
+        <div class="row" style="margin-top:10px">
+          <div>
             <label>Categorías de gastos</label>
             <div id="expenseCategoriesPicker"></div>
             <div class="hint">Usá el desplegable para elegir, “➕ Agregar nuevo...” para crear y “Quitar seleccionada” para eliminar.</div>
@@ -640,7 +649,7 @@
   </script>
 
   <script>
-    window.__APP_VERSION__ = "2.16";
+    window.__APP_VERSION__ = "2.17";
   </script>
   <script type="module" src="/assets/js/app.js"></script>
 </body>

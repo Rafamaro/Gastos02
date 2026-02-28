@@ -26,6 +26,7 @@ function uniqueTrimmed(values = []){
 }
 
 const configPickerDraft = {
+  currencies: [],
   expense: [],
   income: [],
   reentry: [],
@@ -199,11 +200,13 @@ export function renderRates(state){
 }
 
 export function renderConfigPickers(state){
+  configPickerDraft.currencies = uniqueTrimmed(state.config.currencies || configPickerDraft.currencies || []);
   configPickerDraft.expense = uniqueTrimmed(state.config.expenseCategories || configPickerDraft.expense || []);
   configPickerDraft.income = uniqueTrimmed(state.config.incomeCategories || configPickerDraft.income || []);
   configPickerDraft.reentry = uniqueTrimmed(state.config.reentryCategories || configPickerDraft.reentry || []);
   configPickerDraft.groups = uniqueTrimmed(state.config.expenseGroups || configPickerDraft.groups || []);
 
+  renderPickerManager({ containerId: "currenciesPicker", valuesKey: "currencies", values: configPickerDraft.currencies });
   renderPickerManager({ containerId: "expenseCategoriesPicker", valuesKey: "expense", values: configPickerDraft.expense });
   renderPickerManager({ containerId: "incomeCategoriesPicker", valuesKey: "income", values: configPickerDraft.income });
   renderPickerManager({ containerId: "reentryCategoriesPicker", valuesKey: "reentry", values: configPickerDraft.reentry });
@@ -248,11 +251,13 @@ function renderLocalStorageCard(state){
 
 export async function saveConfigFromUI(state){
   const config = state.config;
+  const currencies = readPickerValues("currencies").map(x=>String(x||"" ).toUpperCase());
   const expCats = readPickerValues("expense");
   const incCats = readPickerValues("income");
   const reentryCats = readPickerValues("reentry");
   const groups = readPickerValues("groups");
 
+  if(!currencies.length) return toast("Definí al menos 1 divisa.", "danger");
   if(expCats.length < 1) return toast("Definí al menos 1 categoría de gasto.", "danger");
 
   const rates = { ...config.ratesToBase };
@@ -266,6 +271,7 @@ export async function saveConfigFromUI(state){
   Object.assign(config, {
     locale: el("numLocale").value,
     baseCurrency: el("baseCurrency").value,
+    currencies,
     expenseCategories: expCats,
     incomeCategories: incCats,
     reentryCategories: reentryCats,
@@ -284,6 +290,7 @@ export async function saveConfigFromUI(state){
   fillSelect(el("fCurrency"), state.config.currencies);
   fillSelect(el("eCurrency"), state.config.currencies);
   fillSelect(el("baseCurrency"), state.config.currencies);
+  if(!state.config.currencies.includes(state.config.baseCurrency)) state.config.baseCurrency = state.config.currencies[0];
   renderConfigPickers(state);
   renderRates(state);
   renderCategoryGrouping(state);

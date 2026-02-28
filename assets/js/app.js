@@ -1,4 +1,4 @@
-import { el, monthISO, todayISO, fillSelect, toast } from "./utils.js";
+import { el, monthISO, todayISO, fillSelect, toast, isAnonymized, setAnonymized } from "./utils.js";
 import { getTheme, setTheme } from "./storage.js";
 import { APP_VERSION, defaults } from "./constants.js";
 import { initTabs } from "./router.js";
@@ -20,6 +20,12 @@ import {
 } from "./dataStore.js";
 
 function makeBus(){ return { emit(name, detail){ document.dispatchEvent(new CustomEvent(name, { detail })); }, on(name, fn){ document.addEventListener(name, fn); return ()=> document.removeEventListener(name, fn); } }; }
+
+function refreshAnonymizeUi(){
+  const enabled = isAnonymized();
+  if(el("anonymizeIcon")) el("anonymizeIcon").textContent = enabled ? "🙈" : "👁️";
+  if(el("anonymizeLabel")) el("anonymizeLabel").textContent = enabled ? "Anonimizado" : "Visible";
+}
 
 const state = {
   bus: makeBus(), config: null, tx: [], budgetRows: [], budgets: {}, page: 1, PAGE_SIZE: 12,
@@ -55,9 +61,20 @@ async function init(){
   const versionBadge = el("appVersionBadge");
   if(versionBadge) versionBadge.textContent = `Versión ${APP_VERSION}`;
 
+  setAnonymized(isAnonymized());
+  refreshAnonymizeUi();
+  el("btnAnonymize")?.addEventListener("click", ()=>{
+    const next = !isAnonymized();
+    setAnonymized(next);
+    refreshAnonymizeUi();
+    state.bus.emit("dashboard:refresh");
+    state.bus.emit("ingreso:refresh");
+    state.bus.emit("ahorros:refresh");
+  });
+
   fillSelect(el("fCurrency"), state.config.currencies);
   fillSelect(el("eCurrency"), state.config.currencies);
-  fillSelect(el("baseCurrency"), [state.config.baseCurrency]);
+  fillSelect(el("baseCurrency"), state.config.currencies);
   fillSelect(el("ePay"), ["Tarjeta","Débito","Efectivo","Transferencia","Otro"]);
   el("numLocale").value = state.config.locale || "es-AR";
   el("baseCurrency").value = state.config.baseCurrency;

@@ -1,6 +1,21 @@
 // Utilidades compartidas
 export const el = (id) => document.getElementById(id);
 
+const ANONYMIZE_KEY = "gastos02:anonymize-values";
+
+export function isAnonymized(){
+  return localStorage.getItem(ANONYMIZE_KEY) === "1";
+}
+
+export function setAnonymized(enabled){
+  localStorage.setItem(ANONYMIZE_KEY, enabled ? "1" : "0");
+  document.documentElement.classList.toggle("anonymized", Boolean(enabled));
+}
+
+export function maskedValue(value){
+  return isAnonymized() ? "*" : value;
+}
+
 export function fillSelect(select, items){
   select.innerHTML = "";
   for(const it of items){
@@ -13,7 +28,8 @@ export function fillSelect(select, items){
 
 export function fmtMoney(n, currency, config){
   const value = Number.isFinite(n) ? n : 0;
-  return new Intl.NumberFormat(config.locale, { style: "currency", currency }).format(value);
+  const out = new Intl.NumberFormat(config.locale, { style: "currency", currency }).format(value);
+  return isAnonymized() ? "*" : out;
 }
 
 export function todayISO(){
@@ -55,9 +71,13 @@ export function resolveRate(currency, config, dateLike = "", customRate = null){
   const overrideRate = Number(customRate);
   if(Number.isFinite(overrideRate) && overrideRate > 0) return overrideRate;
 
+  const ccy = String(currency || "").toUpperCase();
+  const stableCoins = ["USDT", "USDC", "TUSD", "DJED", "DAI"];
+  const effectiveCurrency = stableCoins.includes(ccy) ? "USD" : ccy;
+
   const monthKey = monthFromDateLike(dateLike);
-  const monthRate = monthKey ? Number(config?.ratesByMonth?.[monthKey]?.[currency]) : NaN;
-  const fallbackRate = Number(config?.ratesToBase?.[currency] ?? 1);
+  const monthRate = monthKey ? Number(config?.ratesByMonth?.[monthKey]?.[effectiveCurrency]) : NaN;
+  const fallbackRate = Number(config?.ratesToBase?.[effectiveCurrency] ?? 1);
 
   return Number.isFinite(monthRate) && monthRate > 0
     ? monthRate
