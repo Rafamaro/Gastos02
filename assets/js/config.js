@@ -5,6 +5,7 @@ import {
   createCategory,
   listBudgets,
   upsertBudget,
+  deleteBudget,
   syncBudgetMapFromRows,
   connectDataFolder,
   getBackendMode,
@@ -165,8 +166,13 @@ export function initConfig(state){
 
 export function renderRates(state){
   const config = state.config;
+  const monthKey = state.activeMonth || monthISO();
+  if(!config.ratesByMonth || typeof config.ratesByMonth !== "object") config.ratesByMonth = {};
+  if(!config.ratesByMonth[monthKey] || typeof config.ratesByMonth[monthKey] !== "object") config.ratesByMonth[monthKey] = {};
+
   for(const c of config.currencies){ if(config.ratesToBase[c] == null) config.ratesToBase[c] = 1; }
   config.ratesToBase[config.baseCurrency] = 1;
+  config.ratesByMonth[monthKey][config.baseCurrency] = 1;
   const box = el("ratesBox"); box.innerHTML = "";
   const grid = document.createElement("div");
   grid.style.display = "grid";
@@ -182,7 +188,9 @@ export function renderRates(state){
     inp.type = "number";
     inp.step = "0.0001";
     inp.min = "0";
-    inp.value = Number(config.ratesToBase[cur] ?? 1);
+    const monthRate = Number(config.ratesByMonth?.[monthKey]?.[cur]);
+    const globalRate = Number(config.ratesToBase[cur] ?? 1);
+    inp.value = Number.isFinite(monthRate) && monthRate > 0 ? monthRate : globalRate;
     inp.dataset.cur = cur;
     wrap.appendChild(lab);
     wrap.appendChild(inp);
@@ -245,10 +253,13 @@ export async function saveConfigFromUI(state){
   const reentryCats = readPickerValues("reentry");
   const groups = readPickerValues("groups");
 
-  if(expCats.length < 3 || incCats.length < 2 || reentryCats.length < 1) return toast("Revisá categorías mínimas.", "danger");
+  if(expCats.length < 1) return toast("Definí al menos 1 categoría de gasto.", "danger");
 
   const rates = { ...config.ratesToBase };
   document.querySelectorAll("#ratesBox input[data-cur]").forEach(inp=>{ rates[inp.dataset.cur] = Number(inp.value) || 1; });
+  const monthKey = state.activeMonth || monthISO();
+  const ratesByMonth = { ...(config.ratesByMonth || {}) };
+  ratesByMonth[monthKey] = { ...(ratesByMonth[monthKey] || {}), ...rates };
   const categoryGroups = {};
   document.querySelectorAll("#tbodyCategoryGrouping select[data-group-cat]").forEach(sel=>{ if(sel.value) categoryGroups[sel.dataset.groupCat] = sel.value.trim(); });
 
@@ -260,7 +271,8 @@ export async function saveConfigFromUI(state){
     reentryCategories: reentryCats,
     expenseGroups: groups,
     expenseCategoryGroups: categoryGroups,
-    ratesToBase: rates
+    ratesToBase: rates,
+    ratesByMonth
   });
 
   state.config = await saveSettings(config);
@@ -283,19 +295,64 @@ export async function saveConfigFromUI(state){
   state.bus.emit("config:refresh");
 }
 
-export function renderBudgetTable(){
+export function renderBudgetTable(state){
   const tbody = el("tbodyBudgets");
   if(!tbody) return;
-  tbody.innerHTML = "<tr><td colspan='2' class='muted'>Presupuestos desactivados en modo local 2.0.</td></tr>";
+  const month = el("budgetMonth")?.value || state.activeMonth || monthISO();
+  const mode = el("budgetMode")?.value || "category";
+  const entities = mode === "group"
+    ? uniqueTrimmed(state.config.expenseGroups || [])
+    : uniqueTrimmed(state.config.expenseCategories || []);
+  const monthBudgets = state.budgets?.[month] || {};
+  const keyForEntity = mode === "group" ? groupBudgetKey : (name => name);
+
+  const title = el("thBudgetEntity");
+  if(title) title.textContent = mode === "group" ? "Grupo" : "Categoría";
+
+  if(!entities.length){
+    tbody.innerHTML = `<tr><td colspan='2' class='muted'>No hay ${mode === "group" ? "grupos" : "categorías"} configurados.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = entities.map(name=>{
+    const key = keyForEntity(name);
+    const value = Number(monthBudgets[key] || 0);
+    return `
+      <tr>
+        <td style="font-weight:700">${escapeHTML(name)}</td>
+        <td>
+          <input
+            type="number"
+            min="0"
+            step="0.01"
+            placeholder="0"
+            data-budget-key="${escapeHTML(key)}"
+            value="${value > 0 ? String(value) : ""}"
+          />
+        </td>
+      </tr>
+    `;
+  }).join("");
 }
 
 export async function saveBudgetsFromUI(state){
   const m = el("budgetMonth").value || monthISO();
   const payload = [];
+  const keep = new Set();
   document.querySelectorAll("#tbodyBudgets input[data-budget-key]").forEach(inp=>{
     const v = Number(inp.value);
-    if(Number.isFinite(v) && v > 0) payload.push({ month: m, category: inp.dataset.budgetKey, amount: v, currency: state.config.baseCurrency });
+    const key = String(inp.dataset.budgetKey || "").trim();
+    if(Number.isFinite(v) && v > 0 && key){
+      keep.add(key);
+      payload.push({ month: m, category: key, amount: v, currency: state.config.baseCurrency });
+    }
   });
+
+  const existing = Object.keys(state.budgets?.[m] || {});
+  for(const key of existing){
+    if(keep.has(key)) continue;
+    await deleteBudget(`${m}:${key}`);
+  }
 
   for(const row of payload){
     const category = row.category.startsWith(GROUP_BUDGET_PREFIX) ? `${PAYLOAD_GROUP_PREFIX}${row.category.replace(GROUP_BUDGET_PREFIX, "")}` : row.category;

@@ -30,6 +30,8 @@ export function initIngreso(state){
     el(id).addEventListener("change", ()=>{ state.page=1; renderList(state); });
   });
 
+  el("qType").addEventListener("change", ()=> refreshCategorySelects(state));
+
   el("tbody").addEventListener("click", (ev)=>{
     const editBtn = ev.target.closest(".btn-edit");
     if(editBtn){
@@ -103,6 +105,16 @@ function unionCategories(config){
   return [...set];
 }
 
+function availableFilterCategories(config, type){
+  if(type === "income") return [...(config.incomeCategories || [])];
+  if(type === "expense"){
+    const categories = [...(config.expenseCategories || [])];
+    const groups = (config.expenseGroups || []).filter(Boolean).map(group => `[Grupo] ${group}`);
+    return [...categories, ...groups];
+  }
+  return unionCategories(config);
+}
+
 function setSelectOptions(select, options = []){
   select.innerHTML = "";
   for(const option of options){
@@ -138,8 +150,9 @@ export async function refreshCategorySelects(state){
     : (formOptions[0]?.value || "");
 
   const qCategory = el("qCategory");
+  const qTypeValue = el("qType").value;
   const previousFilter = qCategory.value;
-  const allCategories = ["(Todas)", ...unionCategories(config)];
+  const allCategories = ["(Todas)", ...availableFilterCategories(config, qTypeValue)];
   fillSelect(qCategory, allCategories);
   qCategory.value = allCategories.includes(previousFilter) ? previousFilter : "(Todas)";
 
@@ -171,7 +184,7 @@ export function updateAmountHint(state){
   const config = state.config;
   const a = Number(el("fAmount").value) || 0;
   const c = el("fCurrency").value;
-  const base = toBase(a, c, config);
+  const base = toBase(a, c, config, el("fDate").value || todayISO());
 
   el("hintAmount").textContent = (a>0 && c!==config.baseCurrency)
     ? `≈ ${fmtMoney(base, config.baseCurrency, config)} (base)`
@@ -262,7 +275,19 @@ export function getFiltered(state){
     if(type === "reentry") list = list.filter(x => String(x.pay||"").trim().toLowerCase() === "reintegro");
     else list = list.filter(x => x.type === type && String(x.pay||"").trim().toLowerCase() !== "reintegro");
   }
-  if(cat && cat !== "(Todas)") list = list.filter(x => x.category === cat);
+  if(cat && cat !== "(Todas)"){
+    const groupPrefix = "[Grupo] ";
+    if(cat.startsWith(groupPrefix)){
+      const groupName = cat.slice(groupPrefix.length);
+      list = list.filter(x => {
+        if(x.type !== "expense") return false;
+        const group = config.expenseCategoryGroups?.[x.category] || x.category;
+        return group === groupName;
+      });
+    }else{
+      list = list.filter(x => x.category === cat);
+    }
+  }
   if(from) list = list.filter(x => x.date >= from);
   if(to) list = list.filter(x => x.date <= to);
 
@@ -304,7 +329,7 @@ export function renderList(state){
 
 function rowHTML(x, config){
   const tags = (x.tags||[]).slice(0,6).map(t=>`<span class="tag">#${escapeHTML(t)}</span>`).join("");
-  const base = toBase(x.amount, x.currency, config);
+  const base = toBase(x.amount, x.currency, config, x.date);
   const isReentry = x.type==="income" && String(x.pay||"").trim().toLowerCase()==="reintegro";
   const sign = x.type==="expense" ? "−" : "+";
   const badge = isReentry

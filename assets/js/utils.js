@@ -44,9 +44,21 @@ export function id(){
   return Math.random().toString(16).slice(2) + Date.now().toString(16);
 }
 
-export function toBase(amount, currency, config){
+function monthFromDateLike(value){
+  const raw = String(value || "").trim();
+  if(/^\d{4}-\d{2}-\d{2}/.test(raw)) return raw.slice(0, 7);
+  if(/^\d{4}-\d{2}$/.test(raw)) return raw;
+  return "";
+}
+
+export function toBase(amount, currency, config, dateLike = ""){
   const a = Number(amount) || 0;
-  const rate = Number(config?.ratesToBase?.[currency] ?? 1) || 1;
+  const monthKey = monthFromDateLike(dateLike);
+  const monthRate = monthKey ? Number(config?.ratesByMonth?.[monthKey]?.[currency]) : NaN;
+  const fallbackRate = Number(config?.ratesToBase?.[currency] ?? 1);
+  const rate = Number.isFinite(monthRate) && monthRate > 0
+    ? monthRate
+    : (Number.isFinite(fallbackRate) && fallbackRate > 0 ? fallbackRate : 1);
   return a * rate;
 }
 
