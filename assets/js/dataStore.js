@@ -1,5 +1,5 @@
 import { defaults } from "./constants.js";
-import { monthISO } from "./utils.js";
+import { id, monthISO } from "./utils.js";
 import { chooseDataDirectory, getSavedDirectory, isFsAccessSupported, listMonthKeys, readJsonFile, writeJsonFile } from "./storage/fsAccess.js";
 
 const UI_STATE_KEY = "gastos02:ui-state";
@@ -297,7 +297,7 @@ function txFromMovement(mov, month){
 
 function movementFromTx(tx){
   return {
-    id: tx.id || crypto.randomUUID(),
+    id: tx.id || id(),
     date: tx.date,
     type: tx.type === "income" ? "income" : "expense",
     amount: Math.round(Number(tx.amount) || 0),

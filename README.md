@@ -3,9 +3,13 @@
 Gastos02 ahora funciona **100% local**, sin backend y sin Directus.
 
 ## Versión
-- `APP_VERSION`: `2.29`.
+- `APP_VERSION`: `2.3`.
 
 ## Modos de almacenamiento
+
+## Cifrado de JSON
+- Los JSON de `config.json` y `YYYY-MM.json` se guardan cifrados con AES-GCM.
+- Si tenías archivos legacy sin cifrar, la app los lee por compatibilidad y los migra al formato cifrado en la próxima escritura/actualización.
 
 ### 1) Modo carpeta (recomendado)
 - Botón: **Elegir carpeta de datos**.
