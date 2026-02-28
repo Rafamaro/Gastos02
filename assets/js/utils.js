@@ -92,7 +92,8 @@ export function normalizeTx(x, config){
     desc: x.desc || "",
     tags: Array.isArray(x.tags) ? x.tags : safeTags(x.tags),
     notes: x.notes || "",
-    fxRate: Number(x.fxRate) || null
+    fxRate: Number(x.fxRate) || null,
+    includeInNet: x.includeInNet !== false
   };
 }
 

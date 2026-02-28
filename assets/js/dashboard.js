@@ -68,10 +68,18 @@ export function refreshDash(state){
   const reentryTransfers = incomes.filter(isReentryTransfer);
   const regularIncomes = incomes.filter(isRegularIncome);
 
+  const netImpacting = nlist.filter(x => x.includeInNet !== false);
+  const netImpactingIncome = netImpacting.filter(x => x.type === "income");
+  const netImpactingExpenses = netImpacting.filter(x => x.type === "expense");
+  const netImpactingReentry = netImpactingIncome.filter(isReentryTransfer);
+  const netImpactingRegularIncome = netImpactingIncome.filter(isRegularIncome);
+
   const incTotal = regularIncomes.reduce((s,x)=> s + toBase(x.amount, x.currency, config, x.date, x.fxRate), 0);
   const reentryTotal = reentryTransfers.reduce((s,x)=> s + toBase(x.amount, x.currency, config, x.date, x.fxRate), 0);
   const expTotal = expenses.reduce((s,x)=> s + toBase(x.amount, x.currency, config, x.date, x.fxRate), 0);
-  const net = incTotal + reentryTotal - expTotal;
+  const net = netImpactingRegularIncome.reduce((s,x)=> s + toBase(x.amount, x.currency, config, x.date, x.fxRate), 0)
+    + netImpactingReentry.reduce((s,x)=> s + toBase(x.amount, x.currency, config, x.date, x.fxRate), 0)
+    - netImpactingExpenses.reduce((s,x)=> s + toBase(x.amount, x.currency, config, x.date, x.fxRate), 0);
 
   const count = nlist.length;
   const avg = count ? (incTotal + reentryTotal + expTotal) / count : 0;
@@ -141,6 +149,12 @@ function renderCharts(state, list, month, byCatExpense, byCatIncome, byCatReentr
       if(isRegularIncome(x)) incByDay[d-1] += base;
       else if(x.type==="expense") expByDay[d-1] += base;
       else if(isReentryTransfer(x)) expByDay[d-1] -= base;
+
+      if(x.includeInNet === false){
+        if(isRegularIncome(x)) incByDay[d-1] -= base;
+        else if(x.type === "expense") expByDay[d-1] -= base;
+        else if(isReentryTransfer(x)) expByDay[d-1] += base;
+      }
     }
   }
   const netByDay = incByDay.map((v,i)=> v - expByDay[i]);

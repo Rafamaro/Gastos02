@@ -281,6 +281,7 @@ function txFromMovement(mov, month){
     desc: mov.note || "",
     group: mov.groupId || "",
     fxRate: Number(mov.exchangeRate || mov.fxRate) || null,
+    includeInNet: mov.includeInNet !== false,
     month
   };
 }
@@ -298,7 +299,8 @@ function movementFromTx(tx){
     vendor: tx.vendor || "",
     note: tx.notes || tx.desc || "",
     tags: tx.tags || [],
-    exchangeRate: Number(tx.fxRate) > 0 ? Number(tx.fxRate) : null
+    exchangeRate: Number(tx.fxRate) > 0 ? Number(tx.fxRate) : null,
+    includeInNet: tx.includeInNet !== false
   };
 }
 

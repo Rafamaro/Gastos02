@@ -50,6 +50,24 @@
     <!-- AHORROS E INVERSIONES -->
     <section class="grid" id="view-ahorros" role="tabpanel" aria-labelledby="tab-ahorros" data-view="ahorros" style="display:none">
       <div class="card">
+        <h2>Dashboard de ahorros</h2>
+        <div class="hint">Consolidado histórico de ahorros en todas las divisas usando tasas de Config para expresar total en USD.</div>
+        <div class="kpi" id="fxKpi" style="margin-top:10px"></div>
+        <div class="charts">
+          <div class="chartbox">
+            <h3>Composición por divisa (%)</h3>
+            <canvas id="fxChartComposition" height="140"></canvas>
+            <div class="hint" id="fxFallbackComposition" style="display:none"></div>
+          </div>
+          <div class="chartbox">
+            <h3>Crecimiento mensual (%)</h3>
+            <canvas id="fxChartGrowth" height="140"></canvas>
+            <div class="hint" id="fxFallbackGrowth" style="display:none"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
         <h2>Compra / venta de divisas por mes</h2>
         <div class="hint">La compra se registra como gasto (resta del neto). La venta se registra como movimiento que suma al neto, sin sumar al KPI de ingresos.</div>
 
@@ -94,6 +112,10 @@
           <input type="text" id="fxNotes" placeholder="Ej: compra para ahorro mensual" />
         </div>
 
+        <div style="margin-top:10px">
+          <label><input type="checkbox" id="fxAffectsNet" checked /> Impacta neto mensual (si está desmarcado, solo se registra como ahorro)</label>
+        </div>
+
         <div style="display:flex; gap:10px; margin-top:12px; flex-wrap:wrap">
           <button class="btn primary" id="btnFxSave">💾 Registrar operación</button>
           <button class="btn" id="btnFxClear">🧽 Limpiar</button>
@@ -113,6 +135,7 @@
                 <th>Monto</th>
                 <th>Tasa usada</th>
                 <th>Base</th>
+                <th>Impacta neto</th>
                 <th></th>
               </tr>
             </thead>
@@ -617,7 +640,7 @@
   </script>
 
   <script>
-    window.__APP_VERSION__ = "2.15";
+    window.__APP_VERSION__ = "2.16";
   </script>
   <script type="module" src="/assets/js/app.js"></script>
 </body>
