@@ -51,14 +51,22 @@ function monthFromDateLike(value){
   return "";
 }
 
-export function toBase(amount, currency, config, dateLike = ""){
-  const a = Number(amount) || 0;
+export function resolveRate(currency, config, dateLike = "", customRate = null){
+  const overrideRate = Number(customRate);
+  if(Number.isFinite(overrideRate) && overrideRate > 0) return overrideRate;
+
   const monthKey = monthFromDateLike(dateLike);
   const monthRate = monthKey ? Number(config?.ratesByMonth?.[monthKey]?.[currency]) : NaN;
   const fallbackRate = Number(config?.ratesToBase?.[currency] ?? 1);
-  const rate = Number.isFinite(monthRate) && monthRate > 0
+
+  return Number.isFinite(monthRate) && monthRate > 0
     ? monthRate
     : (Number.isFinite(fallbackRate) && fallbackRate > 0 ? fallbackRate : 1);
+}
+
+export function toBase(amount, currency, config, dateLike = "", customRate = null){
+  const a = Number(amount) || 0;
+  const rate = resolveRate(currency, config, dateLike, customRate);
   return a * rate;
 }
 
@@ -83,7 +91,8 @@ export function normalizeTx(x, config){
     vendor: x.vendor || "",
     desc: x.desc || "",
     tags: Array.isArray(x.tags) ? x.tags : safeTags(x.tags),
-    notes: x.notes || ""
+    notes: x.notes || "",
+    fxRate: Number(x.fxRate) || null
   };
 }
 
