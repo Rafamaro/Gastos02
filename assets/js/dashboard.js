@@ -332,6 +332,7 @@ function renderCharts(state, list, month, byCatExpense, byCatIncome, byCatReentr
     }
   });
 
+  const selectedCount = selectedBreakdownEntities(state).length;
   const breakdownTitle = el("dashAgg").value === "group" ? "Gastos por grupo (comparativa)" : "Gastos por categoría (comparativa)";
   const selectedName = selectedBreakdownEntities(state)[0] || "";
   el("hMonthlyBreakdown").textContent = selectedName ? `${breakdownTitle}: ${selectedName}` : breakdownTitle;
