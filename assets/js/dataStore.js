@@ -2,6 +2,8 @@ import { defaults } from "./constants.js";
 import { monthISO } from "./utils.js";
 import { chooseDataDirectory, getSavedDirectory, isFsAccessSupported, listMonthKeys, readJsonFile, writeJsonFile } from "./storage/fsAccess.js";
 
+const UI_STATE_KEY = "gastos02:ui-state";
+
 const runtime = {
   mode: "manual",
   dirHandle: null,
@@ -14,14 +16,14 @@ const runtime = {
 function monthInBuenosAires(){
   const fmt = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Argentina/Buenos_Aires", year: "numeric", month: "2-digit" });
   const parts = fmt.formatToParts(new Date());
-  const y = parts.find(p=>p.type === "year")?.value;
-  const m = parts.find(p=>p.type === "month")?.value;
-  return `${y}-${m}`;
+  const year = parts.find(p=>p.type === "year")?.value;
+  const month = parts.find(p=>p.type === "month")?.value;
+  return `${year}-${month}`;
 }
 
 function toLegacyConfig(cfg){
-  const expenseCategories = cfg.categories.map(c=> c.name);
-  const expenseCategoryGroups = Object.fromEntries(cfg.categories.filter(c=>c.groupId).map(c=> [c.name, cfg.groups.find(g=>g.id===c.groupId)?.name || c.groupId]));
+  const expenseCategories = (cfg.categories || []).map(c=> c.name);
+  const expenseCategoryGroups = Object.fromEntries((cfg.categories || []).filter(c=>c.groupId).map(c=> [c.name, cfg.groups.find(g=>g.id===c.groupId)?.name || c.groupId]));
   return {
     ...cfg,
     baseCurrency: cfg.currency,
@@ -30,7 +32,7 @@ function toLegacyConfig(cfg){
     expenseCategories,
     incomeCategories: ["Ingresos"],
     reentryCategories: ["Reintegro"],
-    expenseGroups: cfg.groups.map(g=> g.name),
+    expenseGroups: (cfg.groups || []).map(g=> g.name),
     expenseCategoryGroups
   };
 }
@@ -50,20 +52,30 @@ function fromLegacyConfig(cfg){
 
 function slug(v){ return String(v || "").trim().toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-_]/g, ""); }
 
+function validMonthKey(v){ return /^\d{4}-\d{2}$/.test(String(v || "")); }
+
 function emptyMonth(monthKey){
   return { version: 1, month: monthKey, currency: runtime.config?.currency || "ARS", movements: [] };
+}
+
+function loadJsonLocal(key, fallback = null){
+  try{ return JSON.parse(localStorage.getItem(key) || "null") ?? fallback; }
+  catch(_err){ return fallback; }
+}
+
+function saveJsonLocal(key, value){
+  localStorage.setItem(key, JSON.stringify(value));
 }
 
 async function ensureMonth(monthKey){
   if(runtime.monthData.has(monthKey)) return runtime.monthData.get(monthKey);
   if(!runtime.dirHandle){
-    const local = JSON.parse(localStorage.getItem(`gastos02:${monthKey}`) || "null") || emptyMonth(monthKey);
+    const local = loadJsonLocal(`gastos02:${monthKey}`) || emptyMonth(monthKey);
     runtime.monthData.set(monthKey, local);
     return local;
   }
-  const file = `${monthKey}.json`;
-  const data = await readJsonFile(runtime.dirHandle, file) || emptyMonth(monthKey);
-  await writeJsonFile(runtime.dirHandle, file, data);
+  const data = await readJsonFile(runtime.dirHandle, `${monthKey}.json`) || emptyMonth(monthKey);
+  await writeJsonFile(runtime.dirHandle, `${monthKey}.json`, data);
   runtime.monthData.set(monthKey, data);
   return data;
 }
@@ -71,16 +83,39 @@ async function ensureMonth(monthKey){
 async function saveMonthObj(monthKey, data){
   runtime.monthData.set(monthKey, data);
   if(runtime.dirHandle) await writeJsonFile(runtime.dirHandle, `${monthKey}.json`, data);
-  else localStorage.setItem(`gastos02:${monthKey}`, JSON.stringify(data));
+  else saveJsonLocal(`gastos02:${monthKey}`, data);
 }
 
 export function getBackendMode(){ return runtime.mode; }
 export function setBackendMode(){ return runtime.mode; }
 
+export function getUiState(){
+  const raw = loadJsonLocal(UI_STATE_KEY, {});
+  return {
+    lastActiveMonth: validMonthKey(raw?.lastActiveMonth) ? raw.lastActiveMonth : null,
+    compareEnabled: Boolean(raw?.compareEnabled),
+    compareMonths: Array.isArray(raw?.compareMonths) ? raw.compareMonths.filter(validMonthKey) : []
+  };
+}
+
+export function saveUiState(partial = {}){
+  const current = getUiState();
+  const next = {
+    ...current,
+    ...partial,
+    compareMonths: Array.isArray(partial.compareMonths) ? partial.compareMonths.filter(validMonthKey) : current.compareMonths,
+    compareEnabled: partial.compareEnabled ?? current.compareEnabled
+  };
+  saveJsonLocal(UI_STATE_KEY, next);
+  return next;
+}
+
 export async function connectDataFolder(){
   if(!isFsAccessSupported()) throw new Error("Tu navegador no soporta File System Access API.");
   runtime.dirHandle = await chooseDataDirectory();
   runtime.mode = "local-folder";
+  runtime.config = null;
+  runtime.monthData.clear();
   return true;
 }
 
@@ -88,36 +123,49 @@ export async function bootstrapStorage(){
   runtime.dirHandle = isFsAccessSupported() ? await getSavedDirectory() : null;
   runtime.mode = runtime.dirHandle ? "local-folder" : "manual";
   runtime.config = await getConfig();
-  return { mode: runtime.mode, connected: Boolean(runtime.dirHandle), fsSupported: isFsAccessSupported() };
+  return {
+    mode: runtime.mode,
+    connected: Boolean(runtime.dirHandle),
+    fsSupported: isFsAccessSupported()
+  };
 }
 
 export async function getConfig(){
   if(runtime.config) return runtime.config;
   let cfg = null;
   if(runtime.dirHandle) cfg = await readJsonFile(runtime.dirHandle, "config.json");
-  else cfg = JSON.parse(localStorage.getItem("gastos02:config") || "null");
+  else cfg = loadJsonLocal("gastos02:config");
+
   if(!cfg){
     cfg = structuredClone(defaults);
-    await saveConfig(cfg);
+    if(runtime.dirHandle) await writeJsonFile(runtime.dirHandle, "config.json", cfg);
+    else saveJsonLocal("gastos02:config", cfg);
   }
   runtime.config = cfg;
   return cfg;
 }
 
 export async function saveConfig(payload){
-  const cfg = payload.categories ? payload : fromLegacyConfig(payload);
+  const cfg = payload?.categories ? payload : fromLegacyConfig(payload || {});
   runtime.config = cfg;
   if(runtime.dirHandle) await writeJsonFile(runtime.dirHandle, "config.json", cfg);
-  else localStorage.setItem("gastos02:config", JSON.stringify(cfg));
+  else saveJsonLocal("gastos02:config", cfg);
   return toLegacyConfig(cfg);
 }
 
-export async function loadCurrentMonth(){
-  const monthKey = monthInBuenosAires();
+export async function loadCurrentMonth(preferredMonth){
+  const defaultMonth = monthInBuenosAires();
+  const monthKey = validMonthKey(preferredMonth) ? preferredMonth : defaultMonth;
   runtime.currentMonth = monthKey;
   runtime.loadedMonths = new Set([monthKey]);
   await ensureMonth(monthKey);
+  saveUiState({ lastActiveMonth: monthKey });
   return monthKey;
+}
+
+export async function setActiveMonth(monthKey){
+  if(!validMonthKey(monthKey)) throw new Error("Mes inválido");
+  return loadCurrentMonth(monthKey);
 }
 
 export async function getMonth(monthKey){ return ensureMonth(monthKey); }
@@ -125,20 +173,49 @@ export async function saveMonth(monthKey, payload){ return saveMonthObj(monthKey
 
 export async function listAvailableMonths(){
   if(runtime.dirHandle) return listMonthKeys(runtime.dirHandle);
-  return Object.keys(localStorage).map(k=>k.match(/^gastos02:(\d{4}-\d{2})$/)?.[1]).filter(Boolean).sort();
+  return Object.keys(localStorage)
+    .map(k=>k.match(/^gastos02:(\d{4}-\d{2})$/)?.[1])
+    .filter(Boolean)
+    .sort();
 }
 
 export async function loadComparisonMonths(monthKeys = []){
-  for(const m of monthKeys) if(m !== runtime.currentMonth) runtime.loadedMonths.add(m);
+  const sanitized = monthKeys.filter(validMonthKey).filter(m=>m !== runtime.currentMonth);
+  runtime.loadedMonths = new Set([runtime.currentMonth, ...sanitized]);
   for(const m of runtime.loadedMonths) await ensureMonth(m);
+  saveUiState({ compareEnabled: sanitized.length > 0, compareMonths: sanitized });
   return [...runtime.loadedMonths];
 }
 
 function txFromMovement(mov, month){
-  return { id: mov.id, type: mov.type, date: mov.date, amount: mov.amount, currency: runtime.config.currency, category: mov.categoryId, pay: mov.paymentMethodId || "", tags: mov.tags || [], notes: mov.note || "", desc: mov.note || "", group: mov.groupId || "", month };
+  return {
+    id: mov.id,
+    type: mov.type,
+    date: mov.date,
+    amount: mov.amount,
+    currency: runtime.config.currency,
+    category: mov.categoryId,
+    pay: mov.paymentMethodId || "",
+    tags: mov.tags || [],
+    notes: mov.note || "",
+    desc: mov.note || "",
+    group: mov.groupId || "",
+    month
+  };
 }
+
 function movementFromTx(tx){
-  return { id: tx.id || crypto.randomUUID(), date: tx.date, type: tx.type === "income" ? "income" : "expense", amount: Math.round(Number(tx.amount) || 0), categoryId: tx.category || "otros", groupId: tx.group || null, paymentMethodId: tx.pay || null, note: tx.notes || tx.desc || "", tags: tx.tags || [] };
+  return {
+    id: tx.id || crypto.randomUUID(),
+    date: tx.date,
+    type: tx.type === "income" ? "income" : "expense",
+    amount: Math.round(Number(tx.amount) || 0),
+    categoryId: tx.categoryId || tx.category || "otros",
+    groupId: tx.group || null,
+    paymentMethodId: tx.pay || null,
+    note: tx.notes || tx.desc || "",
+    tags: tx.tags || []
+  };
 }
 
 export async function getSettings(){ return toLegacyConfig(await getConfig()); }
@@ -162,7 +239,7 @@ export async function listTransactions(){
 }
 
 export async function createTransaction(tx){
-  const monthKey = String(tx.date || monthISO()).slice(0,7);
+  const monthKey = String(tx.date || monthISO()).slice(0, 7);
   const data = await ensureMonth(monthKey);
   data.movements.push(movementFromTx(tx));
   await saveMonthObj(monthKey, data);
@@ -191,7 +268,11 @@ export async function deleteMovement(id){
   for(const m of months){
     const data = await ensureMonth(m);
     const next = data.movements.filter(x=> String(x.id) !== String(id));
-    if(next.length !== data.movements.length){ data.movements = next; await saveMonthObj(m, data); return true; }
+    if(next.length !== data.movements.length){
+      data.movements = next;
+      await saveMonthObj(m, data);
+      return true;
+    }
   }
   return false;
 }
@@ -208,12 +289,11 @@ export async function importMonthlyJson(payload){
     date: m.date,
     type: m.type === "income" ? "income" : "expense",
     amount: Math.round(Number(m.amount) || 0),
-    categoryId: m.category || "otros",
-    groupId: m.group || null,
+    categoryId: m.categoryId || m.category || "otros",
+    groupId: m.groupId || m.group || null,
     paymentMethodId: m.paymentMethodId || null,
     note: m.note || "",
     tags: m.tags || []
   }));
   await saveMonthObj(payload.month, data);
 }
-
