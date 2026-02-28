@@ -1,54 +1,24 @@
-export const APP_VERSION = "1.43";
-// Constantes y defaults (v2)
+export const APP_VERSION = "2.0.0";
+
 export const LS = {
-  TX: "mov_tx_v2",
-  CFG: "mov_cfg_v2",
-  BUD: "mov_bud_v2",
-  THEME: "mov_theme_v2",
-  DX_AUTH: "dx_auth_v1",
-  DX_URL: "dx_url_v1",
-  // compat old
-  OLD_EXP: "gastos_expenses_v1",
-  OLD_CFG: "gastos_config_v1",
-  OLD_BUD: "gastos_budgets_v1"
+  THEME: "mov_theme_v2"
 };
 
 export const defaults = {
-  baseCurrency: "ARS",
-  currencies: ["ARS", "USD", "EUR"],
-  locale: "es-AR",
-  expenseCategories: [
-    "Comida", "Transporte", "Salud", "Hogar", "Servicios", "Educación",
-    "Ocio", "Impuestos", "Ropa", "Trabajo", "Otros"
+  version: 1,
+  currency: "ARS",
+  groups: [
+    { id: "hogar", name: "Hogar" },
+    { id: "trabajo", name: "Trabajo" }
   ],
-  incomeCategories: [
-    "Salario", "Honorarios", "Reembolso", "Reintegro", "Inversiones", "Ventas", "Otros ingresos"
+  categories: [
+    { id: "comida", name: "Comida", groupId: "hogar" },
+    { id: "transporte", name: "Transporte", groupId: "hogar" }
   ],
-  reentryCategories: [
-    "Reintegro", "Devoluciones", "Reembolso de gasto"
+  payment_methods: [
+    { id: "tarjeta", name: "Tarjeta" },
+    { id: "efectivo", name: "Efectivo" }
   ],
-  reentryCategories: [
-    "Reintegro", "Devoluciones", "Reembolso de gasto"
-  ],
-  reentryCategories: [
-    "Reintegro", "Devoluciones", "Reembolso de gasto"
-  ],
-  reentryCategories: [
-    "Reintegro", "Devoluciones", "Reembolso de gasto"
-  ],
-  reentryCategories: [
-    "Reintegro", "Devoluciones", "Reembolso de gasto"
-  ],
-  reentryCategories: [
-    "Reintegro", "Devoluciones", "Reembolso de gasto"
-  ],
-  reentryCategories: [
-    "Reintegro", "Devoluciones", "Reembolso de gasto"
-  ],
-  reentryCategories: [
-    "Reintegro", "Devoluciones", "Reembolso de gasto"
-  ],
-  expenseGroups: ["Esenciales", "Finanzas", "Estilo de vida", "Trabajo"],
-  expenseCategoryGroups: {},
-  ratesToBase: { "ARS": 1, "USD": 1050, "EUR": 1150 } // ejemplo
+  tags: [],
+  ui: { defaultView: "month" }
 };
