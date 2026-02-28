@@ -18,21 +18,10 @@ import {
   saveUiState
 } from "./dataStore.js";
 
-function makeBus(){
-  return {
-    emit(name, detail){ document.dispatchEvent(new CustomEvent(name, { detail })); },
-    on(name, fn){ document.addEventListener(name, fn); return ()=> document.removeEventListener(name, fn); }
-  };
-}
+function makeBus(){ return { emit(name, detail){ document.dispatchEvent(new CustomEvent(name, { detail })); }, on(name, fn){ document.addEventListener(name, fn); return ()=> document.removeEventListener(name, fn); } }; }
 
 const state = {
-  bus: makeBus(),
-  config: null,
-  tx: [],
-  budgetRows: [],
-  budgets: {},
-  page: 1,
-  PAGE_SIZE: 12,
+  bus: makeBus(), config: null, tx: [], budgetRows: [], budgets: {}, page: 1, PAGE_SIZE: 12,
   charts: { daily:null, monthly:null, cats:null, monthlyBreakdown:null, pay:null },
   activeMonth: null,
   loadedComparisonMonths: [],
