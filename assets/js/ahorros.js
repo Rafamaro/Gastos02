@@ -218,6 +218,8 @@ function renderFxDashboard(state, summary){
   const growthPct = prev !== 0 ? ((current - prev) / Math.abs(prev)) * 100 : 0;
   const growthColor = growthPct >= 0 ? "#22c55e" : "#ef4444";
 
+  const registeredRows = parts.filter(p => Math.abs(p.qty) > 0.000001).slice(0, 5);
+
   el("fxKpi").innerHTML = `
     <div class="box">
       <div class="label">Ahorros totales (USD)</div>
@@ -233,6 +235,12 @@ function renderFxDashboard(state, summary){
       <div class="label">Composición principal</div>
       <div class="value">${isAnonymized() ? "*" : (parts[0] ? parts[0].currency : "—")}</div>
       <div class="sub">${maskedValue(parts[0] ? parts[0].pct.toFixed(1) + "%" : "Sin datos")}</div>
+    </div>
+    <div class="box">
+      <div class="label">Divisas registradas</div>
+      <div class="sub" style="margin-top:6px">${registeredRows.length
+        ? registeredRows.map(r => `${isAnonymized() ? "*" : r.currency}: ${maskedValue(Number(r.qty).toFixed(2))}`).join("<br>")
+        : "Sin divisas con saldo"}</div>
     </div>
   `;
 

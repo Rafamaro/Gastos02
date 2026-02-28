@@ -28,8 +28,7 @@
       </div>
 
       <div class="top-actions">
-        <span class="pill" id="pillMode">Modo: --</span>
-        <span class="pill" id="pillMonth"></span>
+                <span class="pill" id="pillMonth"></span>
         <button class="btn small" id="btnTheme" title="Cambiar tema"><span aria-hidden="true">🌓</span> Tema</button>
         <button class="btn small" id="btnAnonymize" title="Anonimizar valores"><span id="anonymizeIcon" aria-hidden="true">👁️</span> <span id="anonymizeLabel">Visible</span></button>
         <button class="btn small" id="btnExport" title="Guardar JSON"><span aria-hidden="true">💾</span> Guardar</button>
@@ -476,7 +475,7 @@
 
       <div class="card">
         <h2>Almacenamiento local</h2>
-        <div class="hint">Modo carpeta usa File System Access API (Chrome/Edge). Si no está disponible, usá el modo manual.</div>
+        <div class="hint">Almacenamiento por carpeta con File System Access API (Chrome/Edge). Si no está disponible, podés importar/exportar JSON manualmente.</div>
         <div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:12px">
           <button class="btn primary" id="btnChooseFolder">Elegir carpeta de datos</button>
           <button class="btn primary" id="btnSaveConfig"><span aria-hidden="true">✅</span> Guardar configuración</button>
@@ -489,7 +488,6 @@
           <button class="btn" id="btnExportMonth">Exportar mes (JSON)</button>
         </div>
         <div style="margin-top:12px">
-          <div><strong>Modo:</strong> <span id="localMode">-</span></div>
           <div><strong>Carpeta conectada:</strong> <span id="folderConnected">no</span></div>
           <div><strong>Mes activo:</strong> <span id="activeMonthStatus">-</span></div>
           <div><strong>Meses en comparación:</strong> <span id="comparisonStatus">ninguno</span></div>
@@ -649,7 +647,7 @@
   </script>
 
   <script>
-    window.__APP_VERSION__ = "2.18";
+    window.__APP_VERSION__ = "2.19";
   </script>
   <script type="module" src="/assets/js/app.js"></script>
 </body>
