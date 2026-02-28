@@ -90,6 +90,14 @@ export function initIngreso(state){
   el("fAmount").addEventListener("input", ()=> updateAmountHint(state));
   el("fCurrency").addEventListener("change", ()=> updateAmountHint(state));
 
+  // persistencia de fecha de ingreso (no volver automáticamente a hoy)
+  if(!state.ingresoFormDate) state.ingresoFormDate = el("fDate").value || todayISO();
+  if(!el("fDate").value) el("fDate").value = state.ingresoFormDate;
+  el("fDate").addEventListener("change", ()=>{
+    state.ingresoFormDate = el("fDate").value || state.ingresoFormDate || todayISO();
+    updateAmountHint(state);
+  });
+
   // primer render
   refreshCategorySelects(state);
   syncLabelsByType(state);
@@ -193,7 +201,9 @@ export function updateAmountHint(state){
 
 export function clearForm(state){
   const config = state.config;
-  el("fDate").value = todayISO();
+  const stickyDate = state.ingresoFormDate || el("fDate").value || todayISO();
+  el("fDate").value = stickyDate;
+  state.ingresoFormDate = stickyDate;
   el("fAmount").value = "";
   el("fVendor").value = "";
   el("fDesc").value = "";
@@ -235,7 +245,7 @@ export async function addTx(state){
   const x = normalizeTx({
     type: effectiveType,
     uiType: t,
-    date: el("fDate").value || todayISO(),
+    date: el("fDate").value || state.ingresoFormDate || todayISO(),
     amount,
     currency: el("fCurrency").value,
     category: selectedCategoryName,
