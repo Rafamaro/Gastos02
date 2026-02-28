@@ -283,19 +283,10 @@ export async function saveConfigFromUI(state){
   state.bus.emit("config:refresh");
 }
 
-export function renderBudgetTable(state){
-  const mode = el("budgetMode").value || "category";
-  const m = el("budgetMonth").value || monthISO();
-  const monthBudget = state.budgets[m] || {};
-  el("thBudgetEntity").textContent = mode === "group" ? "Grupo" : "Categoría";
-  const entities = mode === "group" ? (state.config.expenseGroups || []).filter(Boolean) : state.config.expenseCategories;
-  const tbody = el("tbodyBudgets"); tbody.innerHTML = "";
-  for(const entity of entities){
-    const key = mode === "group" ? groupBudgetKey(entity) : entity;
-    const tr = document.createElement("tr");
-    tr.innerHTML = `<td style="font-weight:900">${escapeHTML(entity)}</td><td><input type="number" step="0.01" min="0" data-budget-key="${escapeHTML(key)}" value="${Number(monthBudget[key]||"") || ""}" placeholder="(sin límite)" /></td>`;
-    tbody.appendChild(tr);
-  }
+export function renderBudgetTable(){
+  const tbody = el("tbodyBudgets");
+  if(!tbody) return;
+  tbody.innerHTML = "<tr><td colspan='2' class='muted'>Presupuestos desactivados en modo local 2.0.</td></tr>";
 }
 
 export async function saveBudgetsFromUI(state){
@@ -310,10 +301,12 @@ export async function saveBudgetsFromUI(state){
     const category = row.category.startsWith(GROUP_BUDGET_PREFIX) ? `${PAYLOAD_GROUP_PREFIX}${row.category.replace(GROUP_BUDGET_PREFIX, "")}` : row.category;
     await upsertBudget({ ...row, category });
   }
-
   state.budgetRows = await listBudgets();
   state.budgets = syncBudgetMapFromRows(state.budgetRows);
   toast("Presupuestos guardados ✅");
   state.bus.emit("budgets:changed");
   state.bus.emit("dashboard:refresh");
 }
+
+void createGroup;
+void createCategory;
