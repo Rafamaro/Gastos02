@@ -1,4 +1,4 @@
-export const APP_VERSION = "2.22";
+export const APP_VERSION = "2.23";
 
 export const LS = {
   THEME: "mov_theme_v2"

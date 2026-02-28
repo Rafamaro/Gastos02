@@ -205,7 +205,12 @@ function renderCharts(state, list, month, byCatExpense, byCatIncome, byCatReentr
       }
     }
   }
-  const netByDay = incByDay.map((v,i)=> v - expByDay[i]);
+  const netByDay = [];
+  let runningNet = 0;
+  for(let i=0;i<incByDay.length;i++){
+    runningNet += (incByDay[i] || 0) - (expByDay[i] || 0);
+    netByDay.push(Number(runningNet.toFixed(2)));
+  }
 
   const monthlyWindow = Number(el("dashMonthlyWindow").value || 6);
   const monthlyMetrics = buildMonthlyComparisonMetrics(state.tx, config, month, monthlyWindow);
