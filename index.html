@@ -356,9 +356,14 @@
             </select>
           </div>
           <div style="margin-bottom:10px">
-            <label id="labDashBreakdownEntities">Ver categorías/grupos en comparativa</label>
-            <select id="dashBreakdownEntities" multiple style="min-height:110px"></select>
-            <div class="hint">Elegí categorías o grupos específicos para compararlos en el período seleccionado.</div>
+            <label>Categorías individuales en comparativa</label>
+            <div id="dashBreakdownCategories" style="display:grid; gap:6px; grid-template-columns: repeat(auto-fit, minmax(180px,1fr)); margin-top:6px"></div>
+            <div class="hint" style="margin-top:4px">Marcá categorías específicas para el período seleccionado.</div>
+          </div>
+          <div style="margin-bottom:10px">
+            <label>Grupos configurados en comparativa</label>
+            <div id="dashBreakdownGroups" style="display:grid; gap:6px; grid-template-columns: repeat(auto-fit, minmax(180px,1fr)); margin-top:6px"></div>
+            <div class="hint" style="margin-top:4px">Marcá grupos específicos para el período seleccionado.</div>
           </div>
           <canvas id="chartMonthlyBreakdown" height="140"></canvas>
           <div class="hint" id="fallbackMonthlyBreakdown" style="display:none"></div>
@@ -652,7 +657,7 @@
   </script>
 
   <script>
-    window.__APP_VERSION__ = "2.21";
+    window.__APP_VERSION__ = "2.22";
   </script>
   <script type="module" src="/assets/js/app.js"></script>
 </body>

@@ -24,46 +24,45 @@ function expenseKeyFromAgg(tx, config, aggMode){
   return group || tx.category;
 }
 
-function breakdownEntitiesForMode(config, aggMode){
-  if(aggMode === "group") return (config.expenseGroups || []).filter(Boolean);
-  return (config.expenseCategories || []).filter(Boolean);
+function checklistValues(containerId){
+  return [...document.querySelectorAll(`#${containerId} input[type="checkbox"]:checked`)]
+    .map(input => input.value)
+    .filter(Boolean);
 }
 
-function syncBreakdownEntityOptions(state){
-  const aggMode = el("dashAgg")?.value || "category";
-  const allEntities = breakdownEntitiesForMode(state.config, aggMode);
-  const select = el("dashBreakdownEntities");
-  if(!select) return;
+function renderBreakdownSelectors(state){
+  const categoriesRoot = el("dashBreakdownCategories");
+  const groupsRoot = el("dashBreakdownGroups");
+  if(!categoriesRoot || !groupsRoot) return;
 
-  const previous = new Set([...select.selectedOptions].map(o => o.value));
-  const hadSelection = previous.size > 0;
+  const selectedCats = new Set(checklistValues("dashBreakdownCategories"));
+  const selectedGroups = new Set(checklistValues("dashBreakdownGroups"));
 
-  select.innerHTML = allEntities.map(name => `<option value="${escapeHTML(name)}">${escapeHTML(name)}</option>`).join("");
+  const categories = (state.config?.expenseCategories || []).filter(Boolean);
+  const groups = (state.config?.expenseGroups || []).filter(Boolean);
 
-  for(const opt of select.options){
-    opt.selected = hadSelection ? previous.has(opt.value) : true;
-  }
-
-  const label = el("labDashBreakdownEntities");
-  if(label) label.textContent = aggMode === "group"
-    ? "Ver grupos en comparativa"
-    : "Ver categorías en comparativa";
+  categoriesRoot.innerHTML = categories.map(name=>`<label><input type="checkbox" value="${escapeHTML(name)}" ${selectedCats.size ? (selectedCats.has(name) ? "checked" : "") : "checked"} /> ${escapeHTML(name)}</label>`).join("") || '<span class="muted">Sin categorías.</span>';
+  groupsRoot.innerHTML = groups.map(name=>`<label><input type="checkbox" value="${escapeHTML(name)}" ${selectedGroups.size ? (selectedGroups.has(name) ? "checked" : "") : "checked"} /> ${escapeHTML(name)}</label>`).join("") || '<span class="muted">Sin grupos.</span>';
 }
 
 function selectedBreakdownEntities(state){
-  const aggMode = el("dashAgg")?.value || "category";
-  const allEntities = breakdownEntitiesForMode(state.config, aggMode);
-  const select = el("dashBreakdownEntities");
-  if(!select) return allEntities;
-  const selected = [...select.selectedOptions].map(o=>o.value).filter(Boolean);
-  return selected.length ? selected : allEntities;
+  const mode = el("dashAgg")?.value || "category";
+  const all = mode === "group"
+    ? (state.config?.expenseGroups || []).filter(Boolean)
+    : (state.config?.expenseCategories || []).filter(Boolean);
+
+  const selected = mode === "group"
+    ? checklistValues("dashBreakdownGroups")
+    : checklistValues("dashBreakdownCategories");
+
+  return selected.length ? selected : all;
 }
 
 export function initDashboard(state){
   // refrescos por eventos
   state.bus.on("dashboard:refresh", ()=> refreshDash(state));
   state.bus.on("tx:changed", ()=> refreshDash(state));
-  state.bus.on("config:changed", ()=> { syncBreakdownEntityOptions(state); refreshDash(state); });
+  state.bus.on("config:changed", ()=> { renderBreakdownSelectors(state); refreshDash(state); });
   state.bus.on("budgets:changed", ()=> refreshDash(state));
 
   // controles propios
@@ -73,9 +72,10 @@ export function initDashboard(state){
   el("dashCatsMode").addEventListener("change", ()=> refreshDash(state));
   el("dashAgg").addEventListener("change", ()=> { syncBreakdownEntityOptions(state); refreshDash(state); });
   el("dashMonthlyWindow").addEventListener("change", ()=> refreshDash(state));
-  el("dashBreakdownEntities")?.addEventListener("change", ()=> refreshDash(state));
+  el("dashBreakdownCategories")?.addEventListener("change", ()=> refreshDash(state));
+  el("dashBreakdownGroups")?.addEventListener("change", ()=> refreshDash(state));
 
-  syncBreakdownEntityOptions(state);
+  renderBreakdownSelectors(state);
   refreshDash(state);
 }
 
@@ -365,8 +365,9 @@ function renderCharts(state, list, month, byCatExpense, byCatIncome, byCatReentr
     }
   });
 
-  const payLabels = byPay.map(x=>x.key);
-  const payVals = byPay.map(x=>Number(x.value.toFixed(2)));
+  const payTop = byPay.slice(0, 10);
+  const payLabels = payTop.map(x=>x.key);
+  const payVals = payTop.map(x=>Number(x.value.toFixed(2)));
   const payPalette = buildPalette(payVals.length, "pay");
 
   state.charts.pay = new Chart(el("chartPay"), {
@@ -374,20 +375,21 @@ function renderCharts(state, list, month, byCatExpense, byCatIncome, byCatReentr
     data: {
       labels: isAnonymized() ? payLabels.map(()=>"*") : payLabels,
       datasets: [{
-        label: `Por medio/fuente (${config.baseCurrency})`,
+        label: `Top medios/fuentes (${config.baseCurrency})`,
         data: payVals,
         backgroundColor: payPalette,
         borderColor: payPalette,
         borderWidth: 1,
-        borderRadius: 8,
-        maxBarThickness: 44
+        borderRadius: 10,
+        maxBarThickness: 28
       }]
     },
     options: {
       responsive:true,
+      indexAxis: "y",
       plugins: {
         legend: { labels: { color:textColor } },
-        tooltip: { callbacks: { label: ctx => `${ctx.dataset.label}: ${fmtMoney(ctx.parsed.y || 0, config.baseCurrency, config)}` } }
+        tooltip: { callbacks: { label: ctx => `${ctx.dataset.label}: ${fmtMoney(ctx.parsed.x || 0, config.baseCurrency, config)}` } }
       },
       scales: {
         x: { grid: { color: borderColor }, ticks: { color: axisColor } },
