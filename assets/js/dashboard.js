@@ -1,7 +1,7 @@
 import { el, fmtMoney, toBase, groupSum, topEntry, escapeHTML } from "./utils.js";
 import { getFiltered } from "./ingreso.js";
 
-const REENTRY_TRANSFER_SOURCES = ["Reingreso por transferencia", "Reintegro"];
+const REENTRY_TRANSFER_SOURCES = ["Reingreso por transferencia", "Reintegro", "Venta de divisas"];
 
 function isRegularIncome(tx){
   return tx.type === "income" && !isReentryTransfer(tx);
@@ -68,19 +68,19 @@ export function refreshDash(state){
   const reentryTransfers = incomes.filter(isReentryTransfer);
   const regularIncomes = incomes.filter(isRegularIncome);
 
-  const incTotal = regularIncomes.reduce((s,x)=> s + toBase(x.amount, x.currency, config, x.date), 0);
-  const reentryTotal = reentryTransfers.reduce((s,x)=> s + toBase(x.amount, x.currency, config, x.date), 0);
-  const expTotal = expenses.reduce((s,x)=> s + toBase(x.amount, x.currency, config, x.date), 0);
+  const incTotal = regularIncomes.reduce((s,x)=> s + toBase(x.amount, x.currency, config, x.date, x.fxRate), 0);
+  const reentryTotal = reentryTransfers.reduce((s,x)=> s + toBase(x.amount, x.currency, config, x.date, x.fxRate), 0);
+  const expTotal = expenses.reduce((s,x)=> s + toBase(x.amount, x.currency, config, x.date, x.fxRate), 0);
   const net = incTotal + reentryTotal - expTotal;
 
   const count = nlist.length;
   const avg = count ? (incTotal + reentryTotal + expTotal) / count : 0;
 
   const expenseAgg = el("dashAgg").value;
-  const byCatExpense = groupSum(expenses, x=>expenseKeyFromAgg(x, config, expenseAgg), x=>toBase(x.amount, x.currency, config, x.date));
-  const byCatIncome = groupSum(regularIncomes, x=>x.category, x=>toBase(x.amount, x.currency, config, x.date));
-  const byCatReentry = groupSum(reentryTransfers, x=>x.category, x=>toBase(x.amount, x.currency, config, x.date));
-  const byPay = groupSum(nlist, x=>x.pay, x=>toBase(x.amount, x.currency, config, x.date));
+  const byCatExpense = groupSum(expenses, x=>expenseKeyFromAgg(x, config, expenseAgg), x=>toBase(x.amount, x.currency, config, x.date, x.fxRate));
+  const byCatIncome = groupSum(regularIncomes, x=>x.category, x=>toBase(x.amount, x.currency, config, x.date, x.fxRate));
+  const byCatReentry = groupSum(reentryTransfers, x=>x.category, x=>toBase(x.amount, x.currency, config, x.date, x.fxRate));
+  const byPay = groupSum(nlist, x=>x.pay, x=>toBase(x.amount, x.currency, config, x.date, x.fxRate));
 
   const topExp = topEntry(byCatExpense);
   const topInc = topEntry(byCatIncome);
@@ -137,7 +137,7 @@ function renderCharts(state, list, month, byCatExpense, byCatIncome, byCatReentr
     if(!String(x.date||"").startsWith(month)) continue;
     const d = Number(String(x.date).slice(8,10));
     if(d>=1 && d<=daysInMonth){
-      const base = toBase(x.amount, x.currency, config, x.date);
+      const base = toBase(x.amount, x.currency, config, x.date, x.fxRate);
       if(isRegularIncome(x)) incByDay[d-1] += base;
       else if(x.type==="expense") expByDay[d-1] += base;
       else if(isReentryTransfer(x)) expByDay[d-1] -= base;
@@ -348,7 +348,7 @@ function buildMonthlyComparisonMetrics(txList, config, month, monthsBack){
   for(const tx of txList){
     const txMonth = String(tx.date || "").slice(0, 7);
     if(!totals.has(txMonth)) continue;
-    const amountBase = toBase(Number(tx.amount) || 0, tx.currency, config, tx.date);
+    const amountBase = toBase(Number(tx.amount) || 0, tx.currency, config, tx.date, tx.fxRate);
     if(isRegularIncome(tx)) totals.get(txMonth).income += amountBase;
     if(tx.type === "expense") totals.get(txMonth).expense += amountBase;
   }
@@ -369,7 +369,7 @@ function buildMonthlyBreakdownMetrics(txList, config, monthKeys, aggMode){
     const bucket = monthMap.get(month);
     if(!bucket) continue;
     const key = expenseKeyFromAgg(tx, config, aggMode);
-    bucket.set(key, (bucket.get(key) || 0) + toBase(Number(tx.amount) || 0, tx.currency, config, tx.date));
+    bucket.set(key, (bucket.get(key) || 0) + toBase(Number(tx.amount) || 0, tx.currency, config, tx.date, tx.fxRate));
   }
 
   const labels = Array.from(monthMap.values())
@@ -458,7 +458,7 @@ function buildCategoryBudgetRows(expenses, config, monthBudget, monthKey){
   const byCat = groupSum(
     expenses.filter(x=> String(x.date||"").startsWith(monthKey)),
     x=>x.category,
-    x=>toBase(x.amount, x.currency, config, x.date)
+    x=>toBase(x.amount, x.currency, config, x.date, x.fxRate)
   );
 
   return (config.expenseCategories||[]).map(cat=>{
@@ -477,7 +477,7 @@ function buildGroupBudgetRows(expenses, config, monthBudget, monthKey){
   const byGroup = groupSum(
     expenses.filter(x=> String(x.date||"").startsWith(monthKey)),
     x=>expenseKeyFromAgg(x, config, "group"),
-    x=>toBase(x.amount, x.currency, config, x.date)
+    x=>toBase(x.amount, x.currency, config, x.date, x.fxRate)
   );
 
   const groups = (config.expenseGroups || []).filter(Boolean);
@@ -521,7 +521,7 @@ function renderCategoryTable(state, expenses, byCatExpense, monthKey, expenseAgg
   const byCategory = groupSum(
     expenses.filter(x=> String(x.date||"").startsWith(monthKey)),
     x=>x.category,
-    x=>toBase(x.amount, x.currency, config, x.date)
+    x=>toBase(x.amount, x.currency, config, x.date, x.fxRate)
   );
 
   const set = new Set([...byCategory.map(x=>x.key), ...Object.keys(monthBudget)]);
