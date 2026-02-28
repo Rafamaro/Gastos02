@@ -54,8 +54,8 @@ async function init(){
   const versionBadge = el("appVersionBadge");
   if(versionBadge) versionBadge.textContent = `Versión ${APP_VERSION}`;
 
-  fillSelect(el("fCurrency"), [state.config.baseCurrency]);
-  fillSelect(el("eCurrency"), [state.config.baseCurrency]);
+  fillSelect(el("fCurrency"), state.config.currencies);
+  fillSelect(el("eCurrency"), state.config.currencies);
   fillSelect(el("baseCurrency"), [state.config.baseCurrency]);
   fillSelect(el("ePay"), ["Tarjeta","Débito","Efectivo","Transferencia","Otro"]);
   el("numLocale").value = state.config.locale || "es-AR";

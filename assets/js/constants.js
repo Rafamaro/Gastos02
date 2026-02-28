@@ -1,4 +1,4 @@
-export const APP_VERSION = "2.12";
+export const APP_VERSION = "2.13";
 
 export const LS = {
   THEME: "mov_theme_v2"
@@ -19,6 +19,7 @@ export const defaults = {
   expenseGroups: ["Esenciales", "Finanzas", "Estilo de vida", "Trabajo"],
   expenseCategoryGroups: {},
   ratesToBase: { ARS: 1, USD: 1050, EUR: 1150 },
+  ratesByMonth: {},
   budgets: {},
 
   // compat nuevo esquema

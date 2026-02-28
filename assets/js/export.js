@@ -88,7 +88,7 @@ export async function exportCSV(state){
   const config = state.config;
   const list = state.tx.slice().sort((a,b)=> (a.date < b.date ? 1 : -1));
   const rows = [["type","date","amount","currency","amount_base","base_currency","category","pay","tags","notes"]];
-  for(const x of list){ rows.push([x.type,x.date,String(Number(x.amount||0)),x.currency,String(toBase(x.amount, x.currency, config)),config.baseCurrency,x.category,x.pay,(x.tags||[]).join("|"),x.notes||""]); }
+  for(const x of list){ rows.push([x.type,x.date,String(Number(x.amount||0)),x.currency,String(toBase(x.amount, x.currency, config, x.date)),config.baseCurrency,x.category,x.pay,(x.tags||[]).join("|"),x.notes||""]); }
   const csv = rows.map(r=> r.join(",")).join("\n");
   await exportJsonToDownload(`movimientos_${Date.now()}.csv`, csv);
   toast("CSV exportado ✅");

@@ -184,7 +184,7 @@ export function updateAmountHint(state){
   const config = state.config;
   const a = Number(el("fAmount").value) || 0;
   const c = el("fCurrency").value;
-  const base = toBase(a, c, config);
+  const base = toBase(a, c, config, el("fDate").value || todayISO());
 
   el("hintAmount").textContent = (a>0 && c!==config.baseCurrency)
     ? `≈ ${fmtMoney(base, config.baseCurrency, config)} (base)`
@@ -329,7 +329,7 @@ export function renderList(state){
 
 function rowHTML(x, config){
   const tags = (x.tags||[]).slice(0,6).map(t=>`<span class="tag">#${escapeHTML(t)}</span>`).join("");
-  const base = toBase(x.amount, x.currency, config);
+  const base = toBase(x.amount, x.currency, config, x.date);
   const isReentry = x.type==="income" && String(x.pay||"").trim().toLowerCase()==="reintegro";
   const sign = x.type==="expense" ? "−" : "+";
   const badge = isReentry

@@ -71,6 +71,18 @@ function normalizeLegacyConfig(cfg = {}){
   }
   out.ratesToBase[out.baseCurrency] = 1;
 
+  const byMonth = out.ratesByMonth && typeof out.ratesByMonth === "object" ? out.ratesByMonth : {};
+  out.ratesByMonth = {};
+  for(const [monthKey, rates] of Object.entries(byMonth)){
+    if(!validMonthKey(monthKey) || !rates || typeof rates !== "object") continue;
+    out.ratesByMonth[monthKey] = {};
+    for(const c of out.currencies){
+      const r = Number(rates[c]);
+      if(Number.isFinite(r) && r > 0) out.ratesByMonth[monthKey][c] = r;
+    }
+    out.ratesByMonth[monthKey][out.baseCurrency] = 1;
+  }
+
   if(!out.budgets || typeof out.budgets !== "object") out.budgets = {};
 
   return out;
@@ -102,6 +114,7 @@ function toConfigFileShape(legacyCfg){
     expenseGroups: cfg.expenseGroups,
     expenseCategoryGroups: cfg.expenseCategoryGroups,
     ratesToBase: cfg.ratesToBase,
+    ratesByMonth: cfg.ratesByMonth,
     budgets: cfg.budgets
   };
 }
@@ -123,6 +136,7 @@ function mergeConfigValues(baseCfg = {}, incoming = {}){
     expenseGroups: uniqueTrimmed([...(base.expenseGroups || []), ...((inc.expenseGroups || []).map(String))]),
     expenseCategoryGroups: { ...(base.expenseCategoryGroups || {}), ...(inc.expenseCategoryGroups || {}) },
     ratesToBase: { ...(base.ratesToBase || {}), ...(inc.ratesToBase || {}) },
+    ratesByMonth: { ...(base.ratesByMonth || {}), ...(inc.ratesByMonth || {}) },
     budgets: { ...(base.budgets || {}), ...(inc.budgets || {}) }
   };
 }
@@ -258,7 +272,7 @@ function txFromMovement(mov, month){
     type: mov.type,
     date: mov.date,
     amount: mov.amount,
-    currency: runtime.config.baseCurrency,
+    currency: mov.currency || runtime.config.baseCurrency,
     category: mov.categoryId,
     pay: mov.paymentMethodId || "",
     vendor: mov.vendor || "",
@@ -278,6 +292,7 @@ function movementFromTx(tx){
     amount: Math.round(Number(tx.amount) || 0),
     categoryId: tx.categoryId || tx.category || "otros",
     groupId: tx.group || runtime.config.expenseCategoryGroups?.[tx.category] || null,
+    currency: tx.currency || runtime.config.baseCurrency,
     paymentMethodId: tx.pay || null,
     vendor: tx.vendor || "",
     note: tx.notes || tx.desc || "",
@@ -545,6 +560,7 @@ export async function importMonthlyJson(payload){
     amount: Math.round(Number(m.amount) || 0),
     categoryId: m.categoryId || m.category || "otros",
     groupId: m.groupId || m.group || null,
+    currency: m.currency || payload.currency || runtime.config?.baseCurrency || "ARS",
     paymentMethodId: m.paymentMethodId || null,
     vendor: m.vendor || "",
     note: m.note || "",

@@ -166,8 +166,13 @@ export function initConfig(state){
 
 export function renderRates(state){
   const config = state.config;
+  const monthKey = state.activeMonth || monthISO();
+  if(!config.ratesByMonth || typeof config.ratesByMonth !== "object") config.ratesByMonth = {};
+  if(!config.ratesByMonth[monthKey] || typeof config.ratesByMonth[monthKey] !== "object") config.ratesByMonth[monthKey] = {};
+
   for(const c of config.currencies){ if(config.ratesToBase[c] == null) config.ratesToBase[c] = 1; }
   config.ratesToBase[config.baseCurrency] = 1;
+  config.ratesByMonth[monthKey][config.baseCurrency] = 1;
   const box = el("ratesBox"); box.innerHTML = "";
   const grid = document.createElement("div");
   grid.style.display = "grid";
@@ -183,7 +188,9 @@ export function renderRates(state){
     inp.type = "number";
     inp.step = "0.0001";
     inp.min = "0";
-    inp.value = Number(config.ratesToBase[cur] ?? 1);
+    const monthRate = Number(config.ratesByMonth?.[monthKey]?.[cur]);
+    const globalRate = Number(config.ratesToBase[cur] ?? 1);
+    inp.value = Number.isFinite(monthRate) && monthRate > 0 ? monthRate : globalRate;
     inp.dataset.cur = cur;
     wrap.appendChild(lab);
     wrap.appendChild(inp);
@@ -250,6 +257,9 @@ export async function saveConfigFromUI(state){
 
   const rates = { ...config.ratesToBase };
   document.querySelectorAll("#ratesBox input[data-cur]").forEach(inp=>{ rates[inp.dataset.cur] = Number(inp.value) || 1; });
+  const monthKey = state.activeMonth || monthISO();
+  const ratesByMonth = { ...(config.ratesByMonth || {}) };
+  ratesByMonth[monthKey] = { ...(ratesByMonth[monthKey] || {}), ...rates };
   const categoryGroups = {};
   document.querySelectorAll("#tbodyCategoryGrouping select[data-group-cat]").forEach(sel=>{ if(sel.value) categoryGroups[sel.dataset.groupCat] = sel.value.trim(); });
 
@@ -261,7 +271,8 @@ export async function saveConfigFromUI(state){
     reentryCategories: reentryCats,
     expenseGroups: groups,
     expenseCategoryGroups: categoryGroups,
-    ratesToBase: rates
+    ratesToBase: rates,
+    ratesByMonth
   });
 
   state.config = await saveSettings(config);
