@@ -177,7 +177,10 @@ async function persistCurrentConfig(){
 }
 
 export function getBackendMode(){ return runtime.mode; }
-export function setBackendMode(){ return runtime.mode; }
+export function setBackendMode(mode){
+  if(mode === "local-folder" || mode === "manual") runtime.mode = mode;
+  return runtime.mode;
+}
 
 export function getUiState(){
   const raw = loadJsonLocal(UI_STATE_KEY, {});

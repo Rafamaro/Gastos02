@@ -3,7 +3,7 @@
 Gastos02 ahora funciona **100% local**, sin backend y sin Directus.
 
 ## Versión
-- `APP_VERSION`: `2.13`.
+- `APP_VERSION`: `2.29`.
 
 ## Modos de almacenamiento
 
@@ -61,6 +61,7 @@ Gastos02 ahora funciona **100% local**, sin backend y sin Directus.
 ```
 
 > `amount` se guarda como **integer** (sin decimales).
+> En la UI de movimientos se usa paso entero para evitar redondeos inesperados al guardar.
 
 ## Flujo de carga
 - Al iniciar:
