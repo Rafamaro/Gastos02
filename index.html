@@ -28,9 +28,9 @@
       </div>
 
       <div class="top-actions">
-        <span class="pill" id="pillMode">Modo: --</span>
-        <span class="pill" id="pillMonth"></span>
+                <span class="pill" id="pillMonth"></span>
         <button class="btn small" id="btnTheme" title="Cambiar tema"><span aria-hidden="true">🌓</span> Tema</button>
+        <button class="btn small" id="btnAnonymize" title="Anonimizar valores"><span id="anonymizeIcon" aria-hidden="true">👁️</span> <span id="anonymizeLabel">Visible</span></button>
         <button class="btn small" id="btnExport" title="Guardar JSON"><span aria-hidden="true">💾</span> Guardar</button>
         <label class="btn small" title="Importar JSON" style="cursor:pointer">
           <input id="fileImport" type="file" accept="application/json" style="display:none" />
@@ -42,9 +42,108 @@
 
     <nav class="tabs" role="tablist" aria-label="Secciones">
       <button class="tab" type="button" id="tab-ingreso" role="tab" data-tab="ingreso" aria-controls="view-ingreso" tabindex="0" aria-selected="true">➕ Ingreso</button>
+      <button class="tab" type="button" id="tab-ahorros" role="tab" data-tab="ahorros" aria-controls="view-ahorros" tabindex="-1" aria-selected="false">💱 Ahorros e INVERSIONES</button>
       <button class="tab" type="button" id="tab-dashboard" role="tab" data-tab="dashboard" aria-controls="view-dashboard" tabindex="-1" aria-selected="false">📊 Dashboard</button>
       <button class="tab" type="button" id="tab-config" role="tab" data-tab="config" aria-controls="view-config" tabindex="-1" aria-selected="false">⚙️ Config</button>
     </nav>
+
+    <!-- AHORROS E INVERSIONES -->
+    <section class="grid" id="view-ahorros" role="tabpanel" aria-labelledby="tab-ahorros" data-view="ahorros" style="display:none">
+      <div class="card">
+        <h2>Dashboard de ahorros</h2>
+        <div class="hint">Consolidado histórico de ahorros en todas las divisas usando tasas de Config para expresar total en USD.</div>
+        <div class="kpi" id="fxKpi" style="margin-top:10px"></div>
+        <div class="charts">
+          <div class="chartbox">
+            <h3>Composición por divisa (%)</h3>
+            <canvas id="fxChartComposition" height="140"></canvas>
+            <div class="hint" id="fxFallbackComposition" style="display:none"></div>
+          </div>
+          <div class="chartbox">
+            <h3>Crecimiento mensual (%)</h3>
+            <canvas id="fxChartGrowth" height="140"></canvas>
+            <div class="hint" id="fxFallbackGrowth" style="display:none"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Compra / venta de divisas por mes</h2>
+        <div class="hint">La compra se registra como gasto (resta del neto). La venta se registra como movimiento que suma al neto, sin sumar al KPI de ingresos.</div>
+
+        <div class="row" style="margin-top:10px">
+          <div>
+            <label>Mes</label>
+            <input type="month" id="fxMonth" />
+          </div>
+          <div>
+            <label>Operación</label>
+            <select id="fxType">
+              <option value="buy">Compra de divisas</option>
+              <option value="sell">Venta de divisas</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="row" style="margin-top:10px">
+          <div>
+            <label>Divisa</label>
+            <select id="fxCurrency"></select>
+          </div>
+          <div>
+            <label>Monto de divisa</label>
+            <input type="number" id="fxAmount" min="0" step="0.01" placeholder="Ej: 250" />
+          </div>
+        </div>
+
+        <div class="row" style="margin-top:10px">
+          <div>
+            <label>Tasa de operación (a moneda base)</label>
+            <input type="number" id="fxRate" min="0" step="0.0001" placeholder="Ej: 1150" />
+          </div>
+          <div>
+            <label>Importe base estimado</label>
+            <input type="text" id="fxBasePreview" readonly placeholder="Se calcula según monto × tasa" />
+          </div>
+        </div>
+
+        <div style="margin-top:10px">
+          <label>Notas</label>
+          <input type="text" id="fxNotes" placeholder="Ej: compra para ahorro mensual" />
+        </div>
+
+        <div style="margin-top:10px">
+          <label><input type="checkbox" id="fxAffectsNet" checked /> Impacta neto mensual (si está desmarcado, solo se registra como ahorro)</label>
+        </div>
+
+        <div style="display:flex; gap:10px; margin-top:12px; flex-wrap:wrap">
+          <button class="btn primary" id="btnFxSave">💾 Registrar operación</button>
+          <button class="btn" id="btnFxClear">🧽 Limpiar</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Operaciones de divisas del mes</h2>
+        <div class="hint" id="fxMonthHint"></div>
+        <div class="table-wrap table-wrap--fixed" style="margin-top:10px">
+          <table class="table" aria-label="Operaciones de divisas">
+            <thead>
+              <tr>
+                <th>Fecha</th>
+                <th>Tipo</th>
+                <th>Divisa</th>
+                <th>Monto</th>
+                <th>Tasa usada</th>
+                <th>Base</th>
+                <th>Impacta neto</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="fxTbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
 
     <!-- INGRESO -->
     <section class="grid" id="view-ingreso" role="tabpanel" aria-labelledby="tab-ingreso" data-view="ingreso">
@@ -256,6 +355,16 @@
               <option value="12">Últimos 12 meses</option>
             </select>
           </div>
+          <div style="margin-bottom:10px">
+            <label>Categorías individuales en comparativa</label>
+            <div id="dashBreakdownCategories" style="display:grid; gap:6px; grid-template-columns: repeat(auto-fit, minmax(180px,1fr)); margin-top:6px"></div>
+            <div class="hint" style="margin-top:4px">Marcá categorías específicas para el período seleccionado.</div>
+          </div>
+          <div style="margin-bottom:10px">
+            <label>Grupos configurados en comparativa</label>
+            <div id="dashBreakdownGroups" style="display:grid; gap:6px; grid-template-columns: repeat(auto-fit, minmax(180px,1fr)); margin-top:6px"></div>
+            <div class="hint" style="margin-top:4px">Marcá grupos específicos para el período seleccionado.</div>
+          </div>
           <canvas id="chartMonthlyBreakdown" height="140"></canvas>
           <div class="hint" id="fallbackMonthlyBreakdown" style="display:none"></div>
         </div>
@@ -306,6 +415,14 @@
               <option value="es-ES">es-ES</option>
             </select>
             <div class="hint">Solo afecta cómo se muestra, no el cálculo.</div>
+          </div>
+        </div>
+
+        <div class="row" style="margin-top:10px">
+          <div>
+            <label>Divisas habilitadas</label>
+            <div id="currenciesPicker"></div>
+            <div class="hint">Podés agregar o quitar divisas/criptomonedas para todos los movimientos.</div>
           </div>
         </div>
 
@@ -368,7 +485,7 @@
 
       <div class="card">
         <h2>Almacenamiento local</h2>
-        <div class="hint">Modo carpeta usa File System Access API (Chrome/Edge). Si no está disponible, usá el modo manual.</div>
+        <div class="hint">Almacenamiento por carpeta con File System Access API (Chrome/Edge). Si no está disponible, podés importar/exportar JSON manualmente.</div>
         <div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:12px">
           <button class="btn primary" id="btnChooseFolder">Elegir carpeta de datos</button>
           <button class="btn primary" id="btnSaveConfig"><span aria-hidden="true">✅</span> Guardar configuración</button>
@@ -381,7 +498,6 @@
           <button class="btn" id="btnExportMonth">Exportar mes (JSON)</button>
         </div>
         <div style="margin-top:12px">
-          <div><strong>Modo:</strong> <span id="localMode">-</span></div>
           <div><strong>Carpeta conectada:</strong> <span id="folderConnected">no</span></div>
           <div><strong>Mes activo:</strong> <span id="activeMonthStatus">-</span></div>
           <div><strong>Meses en comparación:</strong> <span id="comparisonStatus">ninguno</span></div>
@@ -541,7 +657,7 @@
   </script>
 
   <script>
-    window.__APP_VERSION__ = "2.13";
+    window.__APP_VERSION__ = "2.22";
   </script>
   <script type="module" src="/assets/js/app.js"></script>
 </body>
