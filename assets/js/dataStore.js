@@ -243,7 +243,11 @@ export async function saveConfig(payload){
 
 export async function loadCurrentMonth(preferredMonth){
   const defaultMonth = monthInBuenosAires();
-  const monthKey = validMonthKey(preferredMonth) ? preferredMonth : defaultMonth;
+  // El mes activo debe seguir al mes calendario actual para no depender
+  // del último mes guardado en UI state.
+  const monthKey = validMonthKey(preferredMonth) && preferredMonth === defaultMonth
+    ? preferredMonth
+    : defaultMonth;
   runtime.currentMonth = monthKey;
   runtime.loadedMonths = new Set([monthKey]);
   await ensureMonth(monthKey);
