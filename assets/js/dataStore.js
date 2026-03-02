@@ -1,5 +1,5 @@
 import { defaults } from "./constants.js";
-import { monthISO } from "./utils.js";
+import { id, monthISO } from "./utils.js";
 import { chooseDataDirectory, getSavedDirectory, isFsAccessSupported, listMonthKeys, readJsonFile, writeJsonFile } from "./storage/fsAccess.js";
 
 const UI_STATE_KEY = "gastos02:ui-state";
@@ -177,7 +177,10 @@ async function persistCurrentConfig(){
 }
 
 export function getBackendMode(){ return runtime.mode; }
-export function setBackendMode(){ return runtime.mode; }
+export function setBackendMode(mode){
+  if(mode === "local-folder" || mode === "manual") runtime.mode = mode;
+  return runtime.mode;
+}
 
 export function getUiState(){
   const raw = loadJsonLocal(UI_STATE_KEY, {});
@@ -240,7 +243,11 @@ export async function saveConfig(payload){
 
 export async function loadCurrentMonth(preferredMonth){
   const defaultMonth = monthInBuenosAires();
-  const monthKey = validMonthKey(preferredMonth) ? preferredMonth : defaultMonth;
+  // El mes activo debe seguir al mes calendario actual para no depender
+  // del último mes guardado en UI state.
+  const monthKey = validMonthKey(preferredMonth) && preferredMonth === defaultMonth
+    ? preferredMonth
+    : defaultMonth;
   runtime.currentMonth = monthKey;
   runtime.loadedMonths = new Set([monthKey]);
   await ensureMonth(monthKey);
@@ -294,7 +301,7 @@ function txFromMovement(mov, month){
 
 function movementFromTx(tx){
   return {
-    id: tx.id || crypto.randomUUID(),
+    id: tx.id || id(),
     date: tx.date,
     type: tx.type === "income" ? "income" : "expense",
     amount: Math.round(Number(tx.amount) || 0),

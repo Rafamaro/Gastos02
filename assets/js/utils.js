@@ -57,6 +57,7 @@ export function toast(msg, type="ok"){
 }
 
 export function id(){
+  if(typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") return crypto.randomUUID();
   return Math.random().toString(16).slice(2) + Date.now().toString(16);
 }
 

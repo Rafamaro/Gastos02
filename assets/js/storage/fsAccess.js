@@ -1,3 +1,5 @@
+import { decryptPayload, encryptPayload } from "./jsonCrypto.js";
+
 const DB_NAME = "gastos02_fs";
 const STORE = "handles";
 const KEY = "dataDir";
@@ -58,7 +60,8 @@ export async function readJsonFile(handle, filename){
   try{
     const f = await handle.getFileHandle(filename);
     const file = await f.getFile();
-    return JSON.parse(await file.text());
+    const parsed = JSON.parse(await file.text());
+    return await decryptPayload(parsed);
   }catch(err){
     if(err?.name === "NotFoundError") return null;
     throw err;
@@ -68,7 +71,8 @@ export async function readJsonFile(handle, filename){
 export async function writeJsonFile(handle, filename, payload){
   const fileHandle = await handle.getFileHandle(filename, { create: true });
   const writable = await fileHandle.createWritable();
-  await writable.write(JSON.stringify(payload, null, 2));
+  const encrypted = await encryptPayload(payload);
+  await writable.write(JSON.stringify(encrypted, null, 2));
   await writable.close();
 }
 
