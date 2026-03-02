@@ -452,7 +452,16 @@ export async function deleteCategory(id){
 
 export async function listTransactions(){
   const out = [];
-  for(const m of runtime.loadedMonths){
+  const months = new Set(runtime.loadedMonths || []);
+
+  // En modo carpeta/manual pueden existir meses guardados que todavía no se
+  // marcaron como "cargados" en runtime (por ejemplo al reconectar carpeta).
+  // Para que el histórico y dashboard vean todo el contenido, siempre unimos
+  // con la lista completa disponible en storage.
+  const available = await listAvailableMonths();
+  for(const m of available) months.add(m);
+
+  for(const m of months){
     const data = await ensureMonth(m);
     out.push(...(data.movements || []).map(x=> txFromMovement(x, m)));
   }
