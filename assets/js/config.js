@@ -134,10 +134,28 @@ export function initConfig(state){
     if(!selected) return;
     await setActiveMonth(selected);
     state.activeMonth = selected;
-    state.loadedComparisonMonths = [];
-    saveUiState({ lastActiveMonth: selected, compareEnabled: false, compareMonths: [] });
+    const enabled = Boolean(el("compareEnabled")?.checked);
+    const selectedCmp = enabled
+      ? [...(el("cmpMonths")?.selectedOptions || [])].map(o=>o.value)
+      : [];
+
+    await loadComparisonMonths(enabled ? selectedCmp : []);
+    state.loadedComparisonMonths = enabled ? selectedCmp : [];
+    state.tx = await state.reloadTransactions();
+    state.budgetRows = await listBudgets();
+    state.budgets = syncBudgetMapFromRows(state.budgetRows);
+
+    if(el("dashMonth")) el("dashMonth").value = selected;
+    if(el("budgetMonth")) el("budgetMonth").value = selected;
+    if(el("pillMonth")) el("pillMonth").textContent = `Mes activo: ${selected}`;
+
+    saveUiState({ lastActiveMonth: selected, compareEnabled: enabled, compareMonths: state.loadedComparisonMonths });
     toast(`Mes activo actualizado: ${selected}`);
-    location.reload();
+
+    state.bus.emit("dashboard:refresh");
+    state.bus.emit("ingreso:refresh");
+    state.bus.emit("config:refresh");
+    renderLocalStorageCard(state);
   });
 
   el("compareEnabled")?.addEventListener("change", async ()=>{
