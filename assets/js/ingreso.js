@@ -16,6 +16,7 @@ export function initIngreso(state){
   document.querySelectorAll('input[name="fType"]').forEach(r=>{
     r.addEventListener("change", async ()=>{
       await refreshCategorySelects(state);
+      refreshLinkedExpenseOptions(state);
       syncLabelsByType(state);
     });
   });
@@ -84,7 +85,10 @@ export function initIngreso(state){
   el("btnCancelEdit").addEventListener("click", ()=> el("dlgEdit").close());
   el("btnSaveEdit").addEventListener("click", ()=> saveEdit(state));
   el("btnDelete").addEventListener("click", ()=> deleteEdit(state));
-  el("eType").addEventListener("change", ()=> refreshCategorySelects(state));
+  el("eType").addEventListener("change", async ()=> {
+    await refreshCategorySelects(state);
+    refreshLinkedExpenseOptions(state, { isEdit: true });
+  });
 
   // amount hint
   el("fAmount").addEventListener("input", ()=> updateAmountHint(state));
@@ -100,6 +104,7 @@ export function initIngreso(state){
 
   // primer render
   refreshCategorySelects(state);
+  refreshLinkedExpenseOptions(state);
   syncLabelsByType(state);
   renderList(state);
 }
@@ -188,6 +193,47 @@ export function syncLabelsByType(state){
   if(t === "reentry" && el("fPay").value !== "Reintegro") el("fPay").value = "Reintegro";
 }
 
+
+
+function normalizeLinkedExpenseId(value){
+  const id = String(value || "").trim();
+  return id && id !== "(Ninguno)" ? id : "";
+}
+
+function listExpenseOptionsForReentry(state, currentId = ""){
+  return state.tx
+    .map(x => normalizeTx(x, state.config))
+    .filter(x => x.type === "expense")
+    .sort((a,b)=> a.date < b.date ? 1 : -1)
+    .map(expense => {
+      const label = `${expense.date} · ${expense.category} · ${expense.vendor || expense.desc || "Gasto"} · ${fmtMoney(expense.amount, expense.currency, state.config)}`;
+      return { value: expense.id, label };
+    })
+    .filter(opt => opt.value || opt.value === currentId);
+}
+
+function refreshLinkedExpenseOptions(state, { isEdit = false } = {}){
+  const typeControl = isEdit ? el("eType") : document.querySelector('input[name="fType"]:checked');
+  const selectedType = isEdit ? (typeControl?.value || "expense") : (typeControl?.value || "expense");
+  const container = isEdit ? el("eLinkedExpenseWrap") : el("fLinkedExpenseWrap");
+  const select = isEdit ? el("eLinkedExpense") : el("fLinkedExpense");
+  if(!container || !select) return;
+
+  if(selectedType !== "reentry"){
+    container.hidden = true;
+    select.innerHTML = '<option value="">(Ninguno)</option>';
+    select.value = "";
+    return;
+  }
+
+  container.hidden = false;
+  const prev = normalizeLinkedExpenseId(select.value);
+  const options = listExpenseOptionsForReentry(state, prev);
+  setSelectOptions(select, [{ value: "", label: "(Ninguno)" }, ...options]);
+  if(options.some(opt => opt.value === prev)) select.value = prev;
+  else select.value = "";
+}
+
 export function updateAmountHint(state){
   const config = state.config;
   const a = Number(el("fAmount").value) || 0;
@@ -211,8 +257,10 @@ export function clearForm(state){
   el("fNotes").value = "";
   el("fPay").value = "Tarjeta";
   el("fCurrency").value = config.baseCurrency;
+  if(el("fLinkedExpense")) el("fLinkedExpense").value = "";
 
   refreshCategorySelects(state);
+  refreshLinkedExpenseOptions(state);
   updateAmountHint(state);
   toast("Formulario limpio");
 }
@@ -222,6 +270,8 @@ async function reloadFromStorageAndRender(state){
   state.budgetRows = await listBudgets();
   state.budgets = syncBudgetMapFromRows(state.budgetRows);
   await refreshCategorySelects(state);
+  refreshLinkedExpenseOptions(state);
+  refreshLinkedExpenseOptions(state, { isEdit: true });
   renderList(state);
   state.bus.emit("tx:changed");
   state.bus.emit("dashboard:refresh");
@@ -242,6 +292,7 @@ export async function addTx(state){
   const effectiveType = t === "reentry" ? "income" : t;
   const effectivePay = t === "reentry" ? "Reintegro" : el("fPay").value;
   const selectedCategoryName = el("fCategory").selectedOptions?.[0]?.textContent || selectedCategoryId;
+  const linkedExpenseId = t === "reentry" ? normalizeLinkedExpenseId(el("fLinkedExpense")?.value) : "";
   const x = normalizeTx({
     type: effectiveType,
     uiType: t,
@@ -255,10 +306,11 @@ export async function addTx(state){
     desc: el("fDesc").value.trim(),
     tags: safeTags(el("fTags").value),
     notes: el("fNotes").value.trim(),
+    linkedExpenseId
   }, config);
 
   try{
-    const saved = await createTransaction({ ...x, categoryId: selectedCategoryId });
+    const saved = await createTransaction({ ...x, categoryId: selectedCategoryId, linkedExpenseId });
     state.tx.unshift({ ...x, id: saved?.id || x.id });
 
     toast("Guardado ✅");
@@ -386,6 +438,7 @@ export async function openEdit(state, txId){
   el("eId").value = x.id;
   el("eType").value = (x.type === "income" && String(x.pay||"").trim().toLowerCase()==="reintegro") ? "reentry" : x.type;
   await refreshCategorySelects(state);
+  refreshLinkedExpenseOptions(state, { isEdit: true });
 
   el("eDate").value = x.date;
   el("eAmount").value = x.amount;
@@ -396,6 +449,7 @@ export async function openEdit(state, txId){
   const byName = Array.from(eCategory.options).find(opt => opt.textContent === x.category);
   eCategory.value = byName?.value || x.category;
   el("ePay").value = (x.type === "income" && String(x.pay||"").trim().toLowerCase()==="reintegro") ? "Reintegro" : x.pay;
+  if(el("eLinkedExpense")) el("eLinkedExpense").value = normalizeLinkedExpenseId(x.linkedExpenseId);
 
   el("eVendor").value = x.vendor;
   el("eDesc").value = x.desc;
@@ -423,6 +477,7 @@ export async function saveEdit(state){
   const effectiveEditPay = editType === "reentry" ? "Reintegro" : el("ePay").value;
   if(editType === "reentry") el("ePay").value = "Reintegro";
   const selectedEditCategoryName = el("eCategory").selectedOptions?.[0]?.textContent || selectedEditCategoryId;
+  const linkedExpenseId = editType === "reentry" ? normalizeLinkedExpenseId(el("eLinkedExpense")?.value) : "";
   const updated = normalizeTx({
     id: idv,
     type: effectiveEditType,
@@ -437,10 +492,11 @@ export async function saveEdit(state){
     desc: el("eDesc").value.trim(),
     tags: safeTags(el("eTags").value),
     notes: el("eNotes").value.trim(),
+    linkedExpenseId
   }, config);
 
   try{
-    await updateTransaction(idv, { ...updated, categoryId: selectedEditCategoryId });
+    await updateTransaction(idv, { ...updated, categoryId: selectedEditCategoryId, linkedExpenseId });
     state.tx[idx] = updated;
     el("dlgEdit").close();
 
