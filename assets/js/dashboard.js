@@ -1,4 +1,4 @@
-import { el, fmtMoney, toBase, groupSum, topEntry, escapeHTML, maskedValue, isAnonymized } from "./utils.js";
+import { el, fmtMoney, toBase, groupSum, topEntry, escapeHTML, maskedValue, isAnonymized, buildEffectiveExpenseEntries } from "./utils.js";
 import { getFiltered } from "./ingreso.js";
 
 const REENTRY_TRANSFER_SOURCES = ["Reingreso por transferencia", "Reintegro", "Venta de divisas"];
@@ -100,7 +100,10 @@ export function refreshDash(state){
   }));
 
   const incomes = nlist.filter(x=>x.type==="income");
-  const expenses = nlist.filter(x=>x.type==="expense");
+  const expenseEntries = buildEffectiveExpenseEntries(nlist, config);
+  const expenses = expenseEntries.map(({ effectiveAmountBase, ...tx })=> ({ ...tx, amountBase: effectiveAmountBase }));
+  const adjustedExpenseById = new Map(expenses.map(x => [String(x.id || ""), x]));
+  const adjustedList = nlist.map(tx => tx.type === "expense" ? (adjustedExpenseById.get(String(tx.id || "")) || { ...tx, amountBase: 0 }) : tx);
   const reentryTransfers = incomes.filter(isReentryTransfer);
   const regularIncomes = incomes.filter(isRegularIncome);
 
@@ -112,7 +115,7 @@ export function refreshDash(state){
 
   const incTotal = regularIncomes.reduce((s,x)=> s + toBase(x.amount, x.currency, config, x.date, x.fxRate), 0);
   const reentryTotal = reentryTransfers.reduce((s,x)=> s + toBase(x.amount, x.currency, config, x.date, x.fxRate), 0);
-  const expTotal = expenses.reduce((s,x)=> s + toBase(x.amount, x.currency, config, x.date, x.fxRate), 0);
+  const expTotal = expenses.reduce((s,x)=> s + (Number(x.amountBase) || 0), 0);
   const net = netImpactingRegularIncome.reduce((s,x)=> s + toBase(x.amount, x.currency, config, x.date, x.fxRate), 0)
     + netImpactingReentry.reduce((s,x)=> s + toBase(x.amount, x.currency, config, x.date, x.fxRate), 0)
     - netImpactingExpenses.reduce((s,x)=> s + toBase(x.amount, x.currency, config, x.date, x.fxRate), 0);
@@ -121,7 +124,7 @@ export function refreshDash(state){
   const avg = count ? (incTotal + reentryTotal + expTotal) / count : 0;
 
   const expenseAgg = el("dashAgg").value;
-  const byCatExpense = groupSum(expenses, x=>expenseKeyFromAgg(x, config, expenseAgg), x=>toBase(x.amount, x.currency, config, x.date, x.fxRate));
+  const byCatExpense = groupSum(expenses, x=>expenseKeyFromAgg(x, config, expenseAgg), x=>Number(x.amountBase) || 0);
   const byCatIncome = groupSum(regularIncomes, x=>x.category, x=>toBase(x.amount, x.currency, config, x.date, x.fxRate));
   const byCatReentry = groupSum(reentryTransfers, x=>x.category, x=>toBase(x.amount, x.currency, config, x.date, x.fxRate));
   const byPay = groupSum(nlist, x=>x.pay, x=>toBase(x.amount, x.currency, config, x.date, x.fxRate));
@@ -152,7 +155,7 @@ export function refreshDash(state){
     </div>
   `;
 
-  renderCharts(state, nlist, month, byCatExpense, byCatIncome, byCatReentry, byPay);
+  renderCharts(state, adjustedList, month, byCatExpense, byCatIncome, byCatReentry, byPay);
   renderBudgetStatus(state, expenses, month, expenseAgg);
   renderCategoryTable(state, expenses, byCatExpense, month, expenseAgg);
 }
@@ -195,12 +198,12 @@ function renderCharts(state, list, month, byCatExpense, byCatIncome, byCatReentr
     if(d>=1 && d<=daysInMonth){
       const base = toBase(x.amount, x.currency, config, x.date, x.fxRate);
       if(isRegularIncome(x)) incByDay[d-1] += base;
-      else if(x.type==="expense") expByDay[d-1] += base;
+      else if(x.type==="expense") expByDay[d-1] += Number(x.amountBase) || 0;
       else if(isReentryTransfer(x)) expByDay[d-1] -= base;
 
       if(x.includeInNet === false){
         if(isRegularIncome(x)) incByDay[d-1] -= base;
-        else if(x.type === "expense") expByDay[d-1] -= base;
+        else if(x.type === "expense") expByDay[d-1] -= Number(x.amountBase) || 0;
         else if(isReentryTransfer(x)) expByDay[d-1] += base;
       }
     }
@@ -213,8 +216,14 @@ function renderCharts(state, list, month, byCatExpense, byCatIncome, byCatReentr
   }
 
   const monthlyWindow = Number(el("dashMonthlyWindow").value || 6);
-  const monthlyMetrics = buildMonthlyComparisonMetrics(state.tx, config, month, monthlyWindow);
-  const monthlyBreakdown = buildMonthlyBreakdownMetrics(state.tx, config, monthlyMetrics.months, el("dashAgg").value, selectedBreakdownEntities(state));
+  const allAdjustedTx = (() => {
+    const baseTx = state.tx.map(x => ({ ...x, amount: Number(x.amount) || 0 }));
+    const allAdjustedExpenses = buildEffectiveExpenseEntries(baseTx, config).map(({ effectiveAmountBase, ...tx }) => ({ ...tx, amountBase: effectiveAmountBase }));
+    const expenseMap = new Map(allAdjustedExpenses.map(x => [String(x.id || ""), x]));
+    return baseTx.map(tx => tx.type === "expense" ? (expenseMap.get(String(tx.id || "")) || { ...tx, amountBase: 0 }) : tx);
+  })();
+  const monthlyMetrics = buildMonthlyComparisonMetrics(allAdjustedTx, config, month, monthlyWindow);
+  const monthlyBreakdown = buildMonthlyBreakdownMetrics(allAdjustedTx, config, monthlyMetrics.months, el("dashAgg").value, selectedBreakdownEntities(state));
 
   if(!hasChart){
     ["fallbackDaily", "fallbackMonthly", "fallbackCats", "fallbackMonthlyBreakdown", "fallbackPay"].forEach(id => {
@@ -419,7 +428,7 @@ function buildMonthlyComparisonMetrics(txList, config, month, monthsBack){
   for(const tx of txList){
     const txMonth = String(tx.date || "").slice(0, 7);
     if(!totals.has(txMonth)) continue;
-    const amountBase = toBase(Number(tx.amount) || 0, tx.currency, config, tx.date, tx.fxRate);
+    const amountBase = Number(tx.amountBase) || toBase(Number(tx.amount) || 0, tx.currency, config, tx.date, tx.fxRate);
     if(isRegularIncome(tx)) totals.get(txMonth).income += amountBase;
     if(tx.type === "expense") totals.get(txMonth).expense += amountBase;
   }
@@ -440,7 +449,7 @@ function buildMonthlyBreakdownMetrics(txList, config, monthKeys, aggMode, select
     const bucket = monthMap.get(month);
     if(!bucket) continue;
     const key = expenseKeyFromAgg(tx, config, aggMode);
-    bucket.set(key, (bucket.get(key) || 0) + toBase(Number(tx.amount) || 0, tx.currency, config, tx.date, tx.fxRate));
+    bucket.set(key, (bucket.get(key) || 0) + (Number(tx.amountBase) || toBase(Number(tx.amount) || 0, tx.currency, config, tx.date, tx.fxRate)));
   }
 
   const labels = Array.from(monthMap.values())
@@ -530,7 +539,7 @@ function buildCategoryBudgetRows(expenses, config, monthBudget, monthKey){
   const byCat = groupSum(
     expenses.filter(x=> String(x.date||"").startsWith(monthKey)),
     x=>x.category,
-    x=>toBase(x.amount, x.currency, config, x.date, x.fxRate)
+    x=>Number(x.amountBase) || 0
   );
 
   return (config.expenseCategories||[]).map(cat=>{
@@ -549,7 +558,7 @@ function buildGroupBudgetRows(expenses, config, monthBudget, monthKey){
   const byGroup = groupSum(
     expenses.filter(x=> String(x.date||"").startsWith(monthKey)),
     x=>expenseKeyFromAgg(x, config, "group"),
-    x=>toBase(x.amount, x.currency, config, x.date, x.fxRate)
+    x=>Number(x.amountBase) || 0
   );
 
   const groups = (config.expenseGroups || []).filter(Boolean);
@@ -593,7 +602,7 @@ function renderCategoryTable(state, expenses, byCatExpense, monthKey, expenseAgg
   const byCategory = groupSum(
     expenses.filter(x=> String(x.date||"").startsWith(monthKey)),
     x=>x.category,
-    x=>toBase(x.amount, x.currency, config, x.date, x.fxRate)
+    x=>Number(x.amountBase) || 0
   );
 
   const set = new Set([...byCategory.map(x=>x.key), ...Object.keys(monthBudget)]);

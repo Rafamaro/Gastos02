@@ -295,6 +295,7 @@ function txFromMovement(mov, month){
     group: mov.groupId || "",
     fxRate: Number(mov.exchangeRate || mov.fxRate) || null,
     includeInNet: mov.includeInNet !== false,
+    linkedExpenseId: mov.linkedExpenseId || null,
     month
   };
 }
@@ -313,7 +314,8 @@ function movementFromTx(tx){
     note: tx.notes || tx.desc || "",
     tags: tx.tags || [],
     exchangeRate: Number(tx.fxRate) > 0 ? Number(tx.fxRate) : null,
-    includeInNet: tx.includeInNet !== false
+    includeInNet: tx.includeInNet !== false,
+    linkedExpenseId: tx.linkedExpenseId || null
   };
 }
 
