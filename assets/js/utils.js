@@ -28,7 +28,31 @@ export function fillSelect(select, items){
 
 export function fmtMoney(n, currency, config){
   const value = Number.isFinite(n) ? n : 0;
-  const out = new Intl.NumberFormat(config.locale, { style: "currency", currency }).format(value);
+  const locale = config?.locale || "es-AR";
+  const safeCurrency = String(currency || "").trim().toUpperCase();
+
+  const isIntlCurrency = (()=>{
+    if(!safeCurrency) return false;
+    if(typeof Intl.supportedValuesOf === "function"){
+      const supported = Intl.supportedValuesOf("currency").map(code => String(code || "").toUpperCase());
+      return supported.includes(safeCurrency);
+    }
+
+    try{
+      new Intl.NumberFormat(locale, { style: "currency", currency: safeCurrency });
+      return true;
+    }catch(_err){
+      return false;
+    }
+  })();
+
+  const out = isIntlCurrency
+    ? new Intl.NumberFormat(locale, { style: "currency", currency: safeCurrency }).format(value)
+    : `${new Intl.NumberFormat(locale, {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 8
+    }).format(value)} ${safeCurrency || "—"}`;
+
   return isAnonymized() ? "*" : out;
 }
 

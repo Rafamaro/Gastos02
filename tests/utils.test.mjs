@@ -1,6 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { resolveRate, toBase, safeTags, buildEffectiveExpenseEntries } from '../assets/js/utils.js';
+import { resolveRate, toBase, safeTags, buildEffectiveExpenseEntries, fmtMoney } from '../assets/js/utils.js';
+
+globalThis.localStorage = {
+  getItem(){ return null; },
+  setItem(){}
+};
 
 test('resolveRate prioritizes custom rate when valid', () => {
   const config = { ratesByMonth: { '2026-02': { USD: 1200 } }, ratesToBase: { USD: 1100 } };
@@ -66,4 +71,15 @@ test('buildEffectiveExpenseEntries accumulates partial reentries per linked expe
 
   assert.equal(exp1.effectiveAmountBase, 6500);
   assert.equal(exp2.effectiveAmountBase, 4000);
+});
+
+test('fmtMoney formats fiat currencies with Intl currency style', () => {
+  const out = fmtMoney(1000, 'USD', { locale: 'en-US' });
+  assert.match(out, /\$1,000\.00/);
+});
+
+test('fmtMoney formats non-ISO tickers without throwing and appends ticker', () => {
+  assert.doesNotThrow(() => fmtMoney(100, 'USDT', { locale: 'en-US' }));
+  const out = fmtMoney(100, 'USDT', { locale: 'en-US' });
+  assert.match(out, /100\.00 USDT$/);
 });
