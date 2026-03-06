@@ -28,7 +28,31 @@ export function fillSelect(select, items){
 
 export function fmtMoney(n, currency, config){
   const value = Number.isFinite(n) ? n : 0;
-  const out = new Intl.NumberFormat(config.locale, { style: "currency", currency }).format(value);
+  const locale = config?.locale || "es-AR";
+  const safeCurrency = String(currency || "").trim().toUpperCase();
+
+  const isIntlCurrency = (()=>{
+    if(!safeCurrency) return false;
+    if(typeof Intl.supportedValuesOf === "function"){
+      const supported = Intl.supportedValuesOf("currency").map(code => String(code || "").toUpperCase());
+      return supported.includes(safeCurrency);
+    }
+
+    try{
+      new Intl.NumberFormat(locale, { style: "currency", currency: safeCurrency });
+      return true;
+    }catch(_err){
+      return false;
+    }
+  })();
+
+  const out = isIntlCurrency
+    ? new Intl.NumberFormat(locale, { style: "currency", currency: safeCurrency }).format(value)
+    : `${new Intl.NumberFormat(locale, {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 8
+    }).format(value)} ${safeCurrency || "—"}`;
+
   return isAnonymized() ? "*" : out;
 }
 
@@ -101,6 +125,7 @@ export function safeTags(str){
 
 export function normalizeTx(x, config){
   const type = (x.type==="income" || x.type==="expense" || x.type==="reentry") ? x.type : "expense";
+  const linkedExpenseId = String(x.linkedExpenseId || "").trim();
   return {
     id: x.id || id(),
     type,
@@ -114,8 +139,39 @@ export function normalizeTx(x, config){
     tags: Array.isArray(x.tags) ? x.tags : safeTags(x.tags),
     notes: x.notes || "",
     fxRate: Number(x.fxRate) || null,
-    includeInNet: x.includeInNet !== false
+    includeInNet: x.includeInNet !== false,
+    linkedExpenseId: linkedExpenseId || null
   };
+}
+
+export function isReentryTx(tx){
+  if(tx?.type !== "income") return false;
+  return String(tx.pay || "").trim().toLowerCase() === "reintegro";
+}
+
+export function buildEffectiveExpenseEntries(txList = [], config){
+  const expenses = txList.filter(tx => tx?.type === "expense");
+  const discountByExpenseId = new Map();
+
+  for(const tx of txList){
+    if(!isReentryTx(tx)) continue;
+    const linkedExpenseId = String(tx?.linkedExpenseId || "").trim();
+    if(!linkedExpenseId) continue;
+    const amountBase = toBase(Number(tx.amount) || 0, tx.currency, config, tx.date, tx.fxRate);
+    if(!(amountBase > 0)) continue;
+    discountByExpenseId.set(linkedExpenseId, (discountByExpenseId.get(linkedExpenseId) || 0) + amountBase);
+  }
+
+  return expenses.map(expense => {
+    const amountBase = toBase(Number(expense.amount) || 0, expense.currency, config, expense.date, expense.fxRate);
+    const discount = Math.min(amountBase, discountByExpenseId.get(String(expense.id || "")) || 0);
+    return {
+      ...expense,
+      amountBase,
+      linkedReentryBase: discount,
+      effectiveAmountBase: Math.max(0, amountBase - discount)
+    };
+  });
 }
 
 export function sortTx(list){
