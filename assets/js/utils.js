@@ -123,6 +123,49 @@ export function safeTags(str){
     .slice(0, 12);
 }
 
+export function parseAmountInput(value){
+  const raw = String(value ?? "").trim();
+  if(!raw) return 0;
+
+  const compact = raw.replace(/\s+/g, "");
+  const sign = compact.startsWith("-") ? "-" : "";
+  const unsigned = compact.replace(/^[+-]/, "");
+  const hasComma = unsigned.includes(",");
+
+  const normalized = hasComma
+    ? (()=>{
+      const [intRaw = "", ...decRawParts] = unsigned.split(",");
+      const intPart = intRaw.replace(/\./g, "").replace(/\D/g, "") || "0";
+      const decPart = decRawParts.join("").replace(/\D/g, "");
+      return `${sign}${intPart}.${decPart}`;
+    })()
+    : `${sign}${unsigned.replace(/\./g, "").replace(/\D/g, "")}`;
+
+  const n = Number(normalized);
+  return Number.isFinite(n) ? n : NaN;
+}
+
+export function formatAmountInput(value){
+  const raw = String(value ?? "");
+  const trimmed = raw.trim();
+  if(!trimmed) return "";
+
+  const sign = trimmed.startsWith("-") ? "-" : "";
+  const compact = trimmed.replace(/\s+/g, "").replace(/^[+-]/, "");
+  const [intRaw = "", ...decimalParts] = compact.split(",");
+  const decimal = decimalParts.join("").replace(/\D/g, "");
+  const hadComma = compact.includes(",");
+
+  const integerDigits = intRaw.replace(/\./g, "").replace(/\D/g, "");
+  if(!integerDigits && !hadComma) return sign;
+
+  const integer = integerDigits.replace(/^0+(?=\d)/, "") || "0";
+  const grouped = integer.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+
+  if(hadComma) return `${sign}${grouped},${decimal}`;
+  return `${sign}${grouped}`;
+}
+
 export function normalizeTx(x, config){
   const type = (x.type==="income" || x.type==="expense" || x.type==="reentry") ? x.type : "expense";
   const linkedExpenseId = String(x.linkedExpenseId || "").trim();
