@@ -66,10 +66,17 @@
     }
     .logo{
       width:44px;height:44px;border-radius:14px;
-      background: linear-gradient(135deg, rgba(37,99,235,.95), rgba(37,99,235,.45));
+      background: rgba(255,255,255,.1);
       display:grid;place-items:center;
       box-shadow: var(--shadow);
       border: 1px solid rgba(255,255,255,.18);
+      overflow: hidden;
+    }
+    .logo img{
+      width:100%;
+      height:100%;
+      object-fit: cover;
+      display:block;
     }
     .brand h1{
       font-size: 16px;
