@@ -940,3 +940,30 @@ textarea{
 #view-dashboard #budgetStatus{
   padding-right: 6px;
 }
+
+.auth-overlay{
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: color-mix(in oklab, var(--bg) 90%, black 10%);
+  display: grid;
+  place-items: center;
+  padding: 16px;
+}
+.auth-card{
+  width: min(480px, 100%);
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 18px;
+  display: grid;
+  gap: 10px;
+}
+.auth-form{
+  display: grid;
+  gap: 8px;
+}
+.auth-tabs{
+  display: flex;
+  gap: 8px;
+}
