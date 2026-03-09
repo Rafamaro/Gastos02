@@ -350,7 +350,16 @@ function renderMain(state, home, version){
   const scopedHome = { ...home, ...version };
   const categories = resolveCategories(scopedHome, state);
   const shares = computeShares(scopedHome);
-  const expenses = state.tx.filter(tx => tx.type === "expense" && categories.includes(tx.category));
+  const activeMonth = MONTH_KEY_RE.test(String(state.activeMonth || "")) ? String(state.activeMonth) : null;
+  const creationMonth = MONTH_KEY_RE.test(String(home.createdAt || "").slice(0, 7)) ? String(home.createdAt).slice(0, 7) : null;
+  const expenses = state.tx.filter(tx => {
+    if(tx.type !== "expense" || !categories.includes(tx.category)) return false;
+    const txMonth = String(tx.date || "").slice(0, 7);
+    if(!MONTH_KEY_RE.test(txMonth)) return false;
+    if(activeMonth && txMonth !== activeMonth) return false;
+    if(creationMonth && txMonth < creationMonth) return false;
+    return true;
+  });
 
   const byCategory = new Map();
   for(const tx of expenses){
