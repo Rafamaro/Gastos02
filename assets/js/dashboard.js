@@ -323,6 +323,7 @@ function renderCharts(state, list, month, byCatExpense, byCatIncome, byCatReentr
   const catLabels = byCat.slice(0,10).map(x=>x.key);
   const catVals = byCat.slice(0,10).map(x=>Number(x.value.toFixed(2)));
   const catPalette = buildPalette(catVals.length, mode === "income" || mode === "reentry" ? "income" : "expense");
+  const catTotal = catVals.reduce((sum, value)=> sum + value, 0);
 
   state.charts.cats = new Chart(el("chartCats"), {
     type: "doughnut",
@@ -340,8 +341,31 @@ function renderCharts(state, list, month, byCatExpense, byCatIncome, byCatReentr
     options: {
       responsive:true,
       plugins: {
-        legend: { labels: { color:textColor } },
-        tooltip: { callbacks: { label: ctx => `${ctx.label}: ${fmtMoney(ctx.parsed || 0, config.baseCurrency, config)}` } }
+        legend: {
+          labels: {
+            color:textColor,
+            generateLabels(chart){
+              const defaultLabels = Chart.defaults.plugins.legend.labels.generateLabels(chart);
+              if(isAnonymized()) return defaultLabels;
+              const data = chart.data?.datasets?.[0]?.data || [];
+              const total = data.reduce((sum, value)=> sum + (Number(value) || 0), 0);
+              return defaultLabels.map((item)=>{
+                const value = Number(data[item.index]) || 0;
+                const pct = total > 0 ? Math.round((value / total) * 100) : 0;
+                return { ...item, text: `${item.text} ${pct}%` };
+              });
+            }
+          }
+        },
+        tooltip: {
+          callbacks: {
+            label: ctx => {
+              const value = Number(ctx.parsed || 0);
+              const pct = catTotal > 0 ? Math.round((value / catTotal) * 100) : 0;
+              return `${ctx.label}: ${fmtMoney(value, config.baseCurrency, config)} (${pct}%)`;
+            }
+          }
+        }
       }
     }
   });
