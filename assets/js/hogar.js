@@ -103,6 +103,18 @@ function fillMulti(select, values = [], selected = []){
   select.innerHTML = values.map(v=>`<option value="${escapeHTML(v)}" ${selectedSet.has(v) ? "selected" : ""}>${escapeHTML(v)}</option>`).join("");
 }
 
+function enableMultiToggle(select){
+  if(!select || select.dataset.multiToggleReady === "1") return;
+  select.dataset.multiToggleReady = "1";
+  select.addEventListener("mousedown", (ev)=>{
+    const option = ev.target?.closest?.("option");
+    if(!option) return;
+    ev.preventDefault();
+    option.selected = !option.selected;
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+}
+
 function resolveCategories(home, state){
   const groups = new Set(home.groups || []);
   const categories = new Set(home.categories || []);
@@ -174,6 +186,9 @@ export function initHogar(state){
 
   el("btnCloseHogarDlg")?.addEventListener("click", ()=> el("dlgHogar")?.close());
   el("btnCancelHogar")?.addEventListener("click", ()=> el("dlgHogar")?.close());
+
+  enableMultiToggle(el("hogarGroups"));
+  enableMultiToggle(el("hogarCategories"));
 
   el("hogarModel")?.addEventListener("change", ()=>{
     const model = el("hogarModel")?.value;
