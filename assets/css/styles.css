@@ -384,6 +384,276 @@
       text-transform: uppercase;
     }
 
+    /* Dashboard visual refresh */
+    #view-dashboard{
+      --dash-blue-600: #2563eb;
+      --dash-blue-500: #3b82f6;
+      --dash-green-600: #16a34a;
+      --dash-red-600: #dc2626;
+      --dash-amber-500: #f59e0b;
+      --dash-gray-800: #1e293b;
+      --dash-gray-700: #334155;
+      --dash-gray-500: #64748b;
+      --dash-gray-400: #94a3b8;
+      --dash-gray-200: #e2e8f0;
+      --dash-gray-100: #f1f5f9;
+      --dash-gray-50: #f8fafc;
+      background: var(--dash-gray-50);
+      border-color: var(--dash-gray-200);
+      box-shadow: 0 8px 24px rgba(15, 23, 42, .08);
+    }
+    #view-dashboard h2{
+      font-size: 16px;
+      letter-spacing: -.2px;
+      color: var(--dash-gray-800);
+    }
+    #view-dashboard .dashboard-controls{
+      gap: 8px;
+      padding: 6px;
+      border: 1px solid var(--dash-gray-200);
+      border-radius: 12px;
+      background: #fff;
+    }
+    #view-dashboard .dashboard-controls > div{min-width: 160px;}
+    #view-dashboard .dashboard-controls label{
+      margin-bottom: 4px;
+      font-size: 10.5px;
+      letter-spacing: .45px;
+      text-transform: uppercase;
+      color: var(--dash-gray-400);
+      font-weight: 700;
+    }
+    #view-dashboard .dashboard-controls input,
+    #view-dashboard .dashboard-controls select{
+      padding: 8px 10px;
+      border-radius: 8px;
+      border: 1.5px solid var(--dash-gray-200);
+      background: #fff;
+      font-size: 12.5px;
+      color: var(--dash-gray-700);
+    }
+    #view-dashboard #btnRefreshDash{
+      margin-left: auto;
+      align-self: end;
+      background: var(--dash-blue-600);
+      color: #fff;
+      border-color: transparent;
+      box-shadow: 0 2px 8px rgba(37, 99, 235, .25);
+    }
+    #view-dashboard #btnRefreshDash:hover{filter:brightness(1.07)}
+
+    #view-dashboard .kpi{
+      gap: 14px;
+      margin-top: 16px;
+    }
+    #view-dashboard .kpi .box{
+      background: #fff;
+      border: 1.5px solid var(--dash-gray-200);
+      border-radius: 16px;
+      padding: 16px;
+      box-shadow: 0 1px 3px rgba(15,23,42,.06), 0 1px 2px rgba(15,23,42,.04);
+      position: relative;
+      overflow: hidden;
+    }
+    #view-dashboard .kpi .box::before{
+      content: "";
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 3px;
+      background: var(--dash-blue-500);
+    }
+    #view-dashboard .kpi .label{
+      color: var(--dash-gray-400);
+      font-size: 11px;
+      letter-spacing: .6px;
+      text-transform: uppercase;
+    }
+    #view-dashboard .kpi .value{
+      font-family: var(--mono);
+      font-size: 21px;
+      font-weight: 700;
+      line-height: 1.2;
+      color: var(--dash-gray-800);
+      letter-spacing: -.4px;
+    }
+    #view-dashboard .kpi .sub{font-size:11.5px; color: var(--dash-gray-500)}
+
+    #view-dashboard .kpi .box:nth-child(1)::before,
+    #view-dashboard .kpi .box:nth-child(1) .value{color: var(--dash-green-600)}
+    #view-dashboard .kpi .box:nth-child(1)::before{background: #22c55e}
+    #view-dashboard .kpi .box:nth-child(2)::before,
+    #view-dashboard .kpi .box:nth-child(2) .value{color: var(--dash-red-600)}
+    #view-dashboard .kpi .box:nth-child(2)::before{background: #ef4444}
+    #view-dashboard .kpi .box:nth-child(3)::before,
+    #view-dashboard .kpi .box:nth-child(3) .value{color: var(--dash-blue-600)}
+    #view-dashboard .kpi .box:nth-child(3)::before{background: var(--dash-blue-500)}
+    #view-dashboard .kpi .box:nth-child(4)::before,
+    #view-dashboard .kpi .box:nth-child(4) .value{color: var(--dash-amber-500)}
+    #view-dashboard .kpi .box:nth-child(4)::before{background: var(--dash-amber-500)}
+
+    #view-dashboard .charts{gap: 14px; margin-top: 16px;}
+    #view-dashboard .chartbox{
+      background: #fff;
+      border: 1.5px solid var(--dash-gray-200);
+      border-radius: 16px;
+      box-shadow: 0 1px 3px rgba(15,23,42,.07), 0 1px 2px rgba(15,23,42,.04);
+      padding: 0;
+      overflow: hidden;
+    }
+    #view-dashboard .chartbox > h3,
+    #view-dashboard .chartbox > .split{
+      margin: 0;
+      padding: 13px 16px 11px;
+      border-bottom: 1.5px solid var(--dash-gray-100);
+    }
+    #view-dashboard .chartbox h3{
+      color: var(--dash-gray-700);
+      font-size: 11.5px;
+      letter-spacing: .55px;
+      text-transform: uppercase;
+    }
+    #view-dashboard .chartbox canvas,
+    #view-dashboard .chartbox #budgetStatus,
+    #view-dashboard .chartbox > div:not(.split):not(.hint):not([style*="display:none"]) {
+      margin: 14px 16px;
+    }
+    #view-dashboard .hint{color: var(--dash-gray-500)}
+    #view-dashboard .table-wrap{margin-top: 16px !important}
+    #view-dashboard .table{
+      border: 1.5px solid var(--dash-gray-200);
+      border-radius: 16px;
+      background: #fff;
+    }
+    #view-dashboard .table th{
+      text-transform: uppercase;
+      font-size: 10.5px;
+      letter-spacing: .5px;
+      color: var(--dash-gray-400);
+      background: #fff;
+    }
+
+
+
+    /* App-wide visual refresh (aligned with dashboard) */
+    header{
+      background: #fff;
+      border: 1.5px solid var(--border);
+      border-radius: 16px;
+      box-shadow: 0 8px 24px rgba(15, 23, 42, .07);
+      backdrop-filter: none;
+    }
+    .tabs{
+      background: #fff;
+      border: 1.5px solid var(--border);
+      border-radius: 12px;
+      padding: 4px;
+      gap: 4px;
+    }
+    .tab{
+      border: 1px solid transparent;
+      border-bottom: 2.5px solid transparent;
+      border-radius: 8px;
+      font-weight: 600;
+      color: #64748b;
+      background: transparent;
+      margin-bottom: -1px;
+    }
+    .tab:hover{background:#f8fafc;color:#1e293b}
+    .tab[aria-selected="true"]{
+      color: #2563eb;
+      border-color: #dbeafe;
+      border-bottom-color: #2563eb;
+      background: #eff6ff;
+    }
+
+    .card{
+      border: 1.5px solid var(--border);
+      border-radius: 16px;
+      box-shadow: 0 1px 3px rgba(15,23,42,.07), 0 1px 2px rgba(15,23,42,.04);
+      background: #fff;
+    }
+    .card h2{
+      font-size: 15px;
+      font-weight: 700;
+      color: #1e293b;
+      letter-spacing: -.2px;
+      margin-bottom: 14px;
+    }
+
+    .filters,
+    .seg,
+    .table,
+    .table-wrap,
+    .badge,
+    .pill{
+      border-color: #e2e8f0;
+      background: #fff;
+    }
+    .table th{
+      text-transform: uppercase;
+      letter-spacing: .45px;
+      font-size: 10.5px;
+      color: #94a3b8;
+      background: #fff;
+    }
+    .table td{font-size: 12.5px}
+
+    .kpi .box,
+    .chartbox{
+      background: #fff;
+      border: 1.5px solid #e2e8f0;
+      border-radius: 16px;
+      box-shadow: 0 1px 3px rgba(15,23,42,.06), 0 1px 2px rgba(15,23,42,.04);
+    }
+    .chartbox h3{
+      font-size: 11.5px;
+      text-transform: uppercase;
+      letter-spacing: .55px;
+      color: #334155;
+    }
+
+    #view-ingreso .filters,
+    #view-ahorros .row,
+    #view-config .row{
+      padding: 10px;
+      border: 1.5px solid #e2e8f0;
+      border-radius: 12px;
+      background: #f8fafc;
+    }
+    #view-ahorros .row,
+    #view-config .row{margin-top: 10px;}
+
+    #view-ingreso .btn.primary,
+    #view-ahorros .btn.primary,
+    #view-config .btn.primary{
+      background: #2563eb;
+      border-color: transparent;
+      box-shadow: 0 2px 8px rgba(37,99,235,.25);
+    }
+
+    #view-ingreso .badge.income,
+    #view-ahorros .badge.income{color:#16a34a}
+    #view-ingreso .badge.expense,
+    #view-ahorros .badge.expense{color:#dc2626}
+
+    #view-config .picker-manager-row,
+    #view-config #currenciesPicker,
+    #view-config #incomeCategoriesPicker,
+    #view-config #expenseCategoriesPicker,
+    #view-config #reentryCategoriesPicker,
+    #view-config #expenseGroupsPicker,
+    #view-config #groupBudgetPicker,
+    #view-config #expenseCategoryGroupsPicker,
+    #view-config #incomeSourceGroupsPicker,
+    #view-config #ratesEditor,
+    #view-config #budgetEditor{
+      border: 1.5px solid #e2e8f0;
+      border-radius: 12px;
+      padding: 10px;
+      background: #fff;
+    }
     dialog{
       border:none;
       border-radius: 18px;
