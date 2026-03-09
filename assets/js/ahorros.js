@@ -261,7 +261,10 @@ function renderFxDashboard(state, summary){
     type: "doughnut",
     data: {
       labels: parts.map(p => isAnonymized() ? "*" : `${p.currency} (${p.pct.toFixed(1)}%)`),
-      datasets: [{ data: parts.map(p => Number(p.usdVal.toFixed(2))) }]
+      datasets: [{
+        data: parts.map(p => Number(p.usdVal.toFixed(2))),
+        hoverOffset: 8
+      }]
     },
     options: { responsive: true }
   });
