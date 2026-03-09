@@ -918,3 +918,25 @@ textarea{
 .pill{
   line-height: 1.35;
 }
+
+
+/* v2.33.2 — fix clipping and uppercase inconsistencies */
+#view-dashboard .chartbox{
+  overflow: visible;
+  padding-inline: 2px;
+}
+#view-dashboard .chartbox > h3,
+#view-dashboard #hCats,
+#view-dashboard #hMonthlyBreakdown,
+#view-dashboard .table th,
+#view-dashboard .filters label,
+#view-dashboard .dashboard-controls label{
+  text-transform: none;
+  letter-spacing: .1px;
+}
+#view-dashboard .chartbox canvas{
+  margin-top: 10px;
+}
+#view-dashboard #budgetStatus{
+  padding-right: 6px;
+}
