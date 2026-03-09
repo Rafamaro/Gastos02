@@ -429,7 +429,7 @@
 
       <div class="card">
         <h2>Personas e ingresos</h2>
-        <div class="hint" style="margin-bottom:10px">Podés ajustar nombres e ingresos. En modelo equitativo, el porcentaje se calcula solo por participación del ingreso total.</div>
+        <div class="hint" style="margin-bottom:10px">Podés ajustar nombres e ingresos. También podés vincular usuarios existentes y cargar sus ingresos del mes activo sin mostrarlos en pantalla.</div>
         <div class="row" style="margin-bottom:10px">
           <div>
             <label>Forma de distribución (desde el mes activo)</label>
@@ -443,8 +443,9 @@
           </div>
         </div>
         <div id="hogarPersonsBox"></div>
-        <div style="display:flex; gap:10px; margin-top:12px">
+        <div style="display:flex; gap:10px; margin-top:12px; flex-wrap:wrap">
           <button class="btn" id="btnHogarAddPerson"><span aria-hidden="true">➕</span> Agregar persona</button>
+          <button class="btn" id="btnHogarLoadUserIncome"><span aria-hidden="true">👥</span> Cargar ingresos de usuarios</button>
           <button class="btn primary" id="btnHogarSavePersons"><span aria-hidden="true">💾</span> Guardar cambios</button>
         </div>
       </div>

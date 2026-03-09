@@ -1,5 +1,6 @@
 import { el, escapeHTML, fmtMoney, toBase, id, toast, parseAmountInput } from "./utils.js";
 import { getHouseholds, saveHouseholds } from "./dataStore.js";
+import { getSavedDirectory, readJsonFile } from "./storage/fsAccess.js";
 
 const MONTH_KEY_RE = /^\d{4}-\d{2}$/;
 
@@ -8,11 +9,18 @@ function defaultPerson(){
 }
 
 function sanitizePerson(person = {}, index = 0){
+  const linkedUser = person.linkedUser && typeof person.linkedUser === "object"
+    ? {
+      username: String(person.linkedUser.username || "").trim(),
+      folder: String(person.linkedUser.folder || "").trim()
+    }
+    : null;
   return {
     id: person.id || id(),
     name: String(person.name || `Persona ${index + 1}`).trim() || `Persona ${index + 1}`,
     income: Math.max(0, Number(person.income) || 0),
-    percent: Math.max(0, Math.min(100, Number(person.percent) || 0))
+    percent: Math.max(0, Math.min(100, Number(person.percent) || 0)),
+    linkedUser: linkedUser?.username && linkedUser?.folder ? linkedUser : null
   };
 }
 
@@ -146,9 +154,45 @@ function computeShares(home){
 }
 
 export function initHogar(state){
-  const ui = { currentId: null, draftPersons: [] };
+  const ui = { currentId: null, draftPersons: [], availableUsers: [] };
+
+  const loadAvailableUsers = async ()=>{
+    try{
+      const root = await getSavedDirectory();
+      if(!root){ ui.availableUsers = []; return; }
+      const payload = await readJsonFile(root, "users.json");
+      ui.availableUsers = Array.isArray(payload?.users)
+        ? payload.users
+          .map(user => ({ username: String(user?.username || "").trim(), folder: String(user?.folder || "").trim() }))
+          .filter(user => user.username && user.folder)
+        : [];
+    }catch(_err){ ui.availableUsers = []; }
+  };
+
+  const loadIncomeForLinkedUsers = async (persons = [])=>{
+    const root = await getSavedDirectory();
+    if(!root) throw new Error("No se pudo acceder a la carpeta raíz de usuarios");
+
+    const results = [];
+    for(const person of persons){
+      if(!person.linkedUser?.folder){
+        results.push(person);
+        continue;
+      }
+      const userDir = await root.getDirectoryHandle(person.linkedUser.folder, { create: false });
+      const monthPayload = await readJsonFile(userDir, `${state.activeMonth}.json`);
+      const movements = Array.isArray(monthPayload?.movements) ? monthPayload.movements : [];
+      const income = movements
+        .filter(tx => tx?.type === "income")
+        .reduce((acc, tx)=> acc + toBase(Number(tx?.amount) || 0, tx?.currency, state.config, tx?.date, tx?.fxRate), 0);
+      results.push(sanitizePerson({ ...person, income }, 0));
+    }
+    return results;
+  };
 
   const refresh = async ()=>{
+    await loadAvailableUsers();
+    state.hogarUsers = ui.availableUsers;
     const households = await getHouseholds();
     if(!households.length){
       if(el("tab-hogar")) el("tab-hogar").style.display = "none";
@@ -277,22 +321,50 @@ export function initHogar(state){
     const current = normalizeHome(households.find(h=> h.id === ui.currentId) || households[0], state);
     if(!current) return;
 
+    const version = resolveVersion(current, state.activeMonth);
+    const currentPersons = new Map((version?.persons || []).map(person => [person.id, sanitizePerson(person)]));
+
     const rows = [...document.querySelectorAll("[data-hogar-person-row]")];
-    const persons = rows.map((row, idx)=>(
-      sanitizePerson({
+    const persons = rows.map((row, idx)=>{
+      const previous = currentPersons.get(row.dataset.personId) || {};
+      const selectedFolder = String(row.querySelector("[data-hogar-linked-user]")?.value || "").trim();
+      const linkedUser = ui.availableUsers.find(user => user.folder === selectedFolder) || null;
+      return sanitizePerson({
         id: row.dataset.personId,
         name: row.querySelector("[data-hogar-name]")?.value,
-        income: row.querySelector("[data-hogar-income]")?.value,
-        percent: row.querySelector("[data-hogar-percent]")?.value
-      }, idx)
-    )).filter(p=>p.name);
+        income: linkedUser ? previous.income : row.querySelector("[data-hogar-income]")?.value,
+        percent: row.querySelector("[data-hogar-percent]")?.value,
+        linkedUser
+      }, idx);
+    }).filter(p=>p.name);
 
-    const version = resolveVersion(current, state.activeMonth);
+
     const nextPersons = persons.length ? persons : [sanitizePerson({ name: "Persona 1" }, 0)];
     current.versions = upsertVersionByMonth(current, normalizeVersion({ ...version, persons: nextPersons, effectiveMonth: state.activeMonth }, state.activeMonth));
     await saveHouseholds(households.map(h=> h.id === current.id ? normalizeHome(current, state) : h));
     toast("Participantes guardados ✅");
     state.bus.emit("hogar:refresh");
+  });
+
+  el("btnHogarLoadUserIncome")?.addEventListener("click", async ()=>{
+    const households = await getHouseholds();
+    const current = normalizeHome(households.find(h=> h.id === ui.currentId) || households[0], state);
+    if(!current) return;
+    const version = resolveVersion(current, state.activeMonth);
+    if(!version) return;
+
+    const linkedCount = (version.persons || []).filter(person => person?.linkedUser?.folder).length;
+    if(!linkedCount) return toast("Primero vinculá al menos una persona con un usuario existente.", "warn");
+
+    try{
+      const persons = await loadIncomeForLinkedUsers(version.persons || []);
+      current.versions = upsertVersionByMonth(current, normalizeVersion({ ...version, persons, effectiveMonth: state.activeMonth }, state.activeMonth));
+      await saveHouseholds(households.map(h=> h.id === current.id ? normalizeHome(current, state) : h));
+      toast("Ingresos de usuarios vinculados actualizados ✅");
+      state.bus.emit("hogar:refresh");
+    }catch(err){
+      toast(err?.message || "No se pudieron cargar ingresos desde usuarios.", "danger");
+    }
   });
 
   refresh();
@@ -409,6 +481,7 @@ function renderMain(state, home, version){
 
   const peopleBox = el("hogarPersonsBox");
   if(peopleBox){
+    const users = state?.hogarUsers || [];
     peopleBox.innerHTML = shares.map(p=>`
       <div class="row" data-hogar-person-row data-person-id="${escapeHTML(p.id)}" style="margin-top:8px">
         <div>
@@ -417,11 +490,18 @@ function renderMain(state, home, version){
         </div>
         <div>
           <label>Ingreso</label>
-          <input type="text" inputmode="decimal" autocomplete="off" data-hogar-income value="${p.income}" ${version.model === "personalizado" ? "disabled" : ""} />
+          <input type="text" inputmode="decimal" autocomplete="off" data-hogar-income value="${p.linkedUser ? "" : p.income}" ${version.model === "personalizado" || p.linkedUser ? "disabled" : ""} placeholder="${p.linkedUser ? "•••• (oculto)" : "0"}" />
         </div>
         <div>
           <label>Porcentaje</label>
           <input type="text" inputmode="decimal" autocomplete="off" data-hogar-percent value="${(p.share * 100).toFixed(2)}" ${version.model === "equitativo" ? "disabled" : ""} />
+        </div>
+        <div>
+          <label>Usuario vinculado</label>
+          <select data-hogar-linked-user>
+            <option value="">(Sin vincular)</option>
+            ${users.map(user => `<option value="${escapeHTML(user.folder)}" ${p.linkedUser?.folder === user.folder ? "selected" : ""}>${escapeHTML(user.username)}</option>`).join("")}
+          </select>
         </div>
       </div>
     `).join("");
