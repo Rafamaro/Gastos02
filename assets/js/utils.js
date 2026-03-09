@@ -166,6 +166,76 @@ export function formatAmountInput(value){
   return `${sign}${grouped}`;
 }
 
+
+export function formatAmountField(input){
+  if(!input) return;
+  const start = input.selectionStart ?? String(input.value || "").length;
+  const digitsBefore = String(input.value || "").slice(0, start).replace(/\D/g, "").length;
+
+  input.value = formatAmountInput(input.value);
+
+  const formatted = String(input.value || "");
+  if(typeof input.setSelectionRange === "function"){
+    let seenDigits = 0;
+    let next = formatted.length;
+    for(let i = 0; i < formatted.length; i += 1){
+      if(/\d/.test(formatted[i])) seenDigits += 1;
+      if(seenDigits >= digitsBefore){
+        next = i + 1;
+        break;
+      }
+    }
+    input.setSelectionRange(next, next);
+  }
+}
+
+function shouldEnhanceNumericInput(input){
+  if(typeof HTMLInputElement === "undefined") return false;
+  if(!(input instanceof HTMLInputElement)) return false;
+  if(input.dataset.noNumericFormat === "1") return false;
+  return input.type === "number" || input.inputMode === "decimal" || input.dataset.numericFormat === "1";
+}
+
+function enhanceOneNumericInput(input){
+  if(!shouldEnhanceNumericInput(input)) return;
+  if(input.type === "number") input.type = "text";
+  if(!input.inputMode) input.inputMode = "decimal";
+  if(!input.autocomplete) input.autocomplete = "off";
+  input.dataset.numericFormat = "1";
+
+  if(input.dataset.numericFormatBound !== "1"){
+    input.addEventListener("input", ()=> formatAmountField(input));
+    input.dataset.numericFormatBound = "1";
+  }
+
+  if(String(input.value || "").trim()) formatAmountField(input);
+}
+
+export function initNumericInputFormatting(root = document){
+  if(typeof MutationObserver === "undefined") return;
+  const host = root?.body || root;
+  if(!host) return;
+
+  const scan = (scope)=>{
+    if(!scope) return;
+    if(scope instanceof HTMLInputElement) enhanceOneNumericInput(scope);
+    if(typeof scope.querySelectorAll === "function"){
+      scope.querySelectorAll('input').forEach(enhanceOneNumericInput);
+    }
+  };
+
+  scan(host);
+
+  if(host.dataset?.numericObserverAttached === "1") return;
+  const observer = new MutationObserver((mutations)=>{
+    for(const m of mutations){
+      m.addedNodes.forEach(node=> scan(node));
+    }
+  });
+  observer.observe(host, { childList: true, subtree: true });
+  if(host.dataset) host.dataset.numericObserverAttached = "1";
+}
+
 export function normalizeTx(x, config){
   const type = (x.type==="income" || x.type==="expense" || x.type==="reentry") ? x.type : "expense";
   const linkedExpenseId = String(x.linkedExpenseId || "").trim();

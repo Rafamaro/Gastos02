@@ -1,4 +1,4 @@
-import { el, monthISO, todayISO, fillSelect, toast, isAnonymized, setAnonymized } from "./utils.js";
+import { el, monthISO, todayISO, fillSelect, toast, isAnonymized, setAnonymized, initNumericInputFormatting } from "./utils.js";
 import { getTheme, setTheme } from "./storage.js";
 import { APP_VERSION, defaults } from "./constants.js";
 import { initTabs } from "./router.js";
@@ -94,6 +94,8 @@ async function init(){
   initConfig(state);
   initHogar(state);
   initExport(state);
+
+  initNumericInputFormatting(document);
 
   state.bus.emit("dashboard:refresh");
   state.bus.emit("ingreso:refresh");
