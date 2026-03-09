@@ -759,3 +759,145 @@
       .table th, .table td{padding: 8px 7px; font-size: 11px;}
       .pill{justify-content:center;}
     }
+
+/* v2.33 — visual hierarchy refactor: separar sin encerrar */
+.wrap{
+  max-width: 1200px;
+  padding: 28px 18px 56px;
+}
+header{
+  margin-bottom: 20px;
+  padding: 0 0 14px;
+  border: none;
+  border-bottom: 1px solid color-mix(in oklab, var(--border) 82%, transparent);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+.tabs{
+  margin: 2px 0 26px;
+  padding: 0;
+  gap: 10px;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+}
+.tab{
+  padding: 8px 2px;
+  border: 1px solid transparent;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  background: transparent;
+}
+.tab:hover{
+  background: transparent;
+  border-bottom-color: color-mix(in oklab, var(--primary) 26%, var(--border));
+}
+.tab[aria-selected="true"]{
+  background: transparent;
+  border-color: transparent;
+  border-bottom-color: var(--primary);
+}
+.grid{gap: 30px;}
+.card{
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  background: transparent;
+  padding: 0;
+}
+.card + .card{
+  padding-top: 24px;
+  border-top: 1px solid color-mix(in oklab, var(--border) 86%, transparent);
+}
+.card h2{
+  margin: 0 0 16px;
+  font-size: 18px;
+}
+.filters{
+  padding: 0;
+  border: none;
+  background: transparent;
+}
+.table-wrap{border-radius: 0;}
+.table{
+  border: none;
+  border-radius: 0;
+  background: transparent;
+}
+.table th{background: transparent;}
+.kpi{gap: 12px;}
+.kpi .box{
+  border: 1px solid color-mix(in oklab, var(--border) 84%, transparent);
+  border-radius: 12px;
+  box-shadow: none;
+}
+.charts{
+  gap: 22px;
+  margin-top: 18px;
+}
+.chartbox{
+  padding: 0 0 12px;
+  border: none;
+  border-bottom: 1px solid color-mix(in oklab, var(--border) 84%, transparent);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.chartbox h3{margin: 0 0 12px;}
+
+#view-dashboard{
+  background: transparent;
+  border: none;
+  box-shadow: none;
+}
+#view-dashboard .dashboard-controls{
+  padding: 0;
+  border: none;
+  background: transparent;
+}
+#view-dashboard .chartbox{
+  border: none;
+  border-bottom: 1px solid color-mix(in oklab, var(--border) 84%, transparent);
+}
+#view-dashboard .chartbox > h3,
+#view-dashboard .chartbox > .split{
+  padding: 0;
+  border: none;
+}
+#view-dashboard .chartbox canvas,
+#view-dashboard .chartbox #budgetStatus,
+#view-dashboard .chartbox > div:not(.split):not(.hint):not([style*="display:none"]) {
+  margin: 8px 0;
+}
+#view-dashboard .table{border:none;background:transparent;}
+
+#view-ingreso .filters,
+#view-ahorros .row,
+#view-config .row{
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+}
+#view-config .picker-manager-row,
+#view-config #currenciesPicker,
+#view-config #incomeCategoriesPicker,
+#view-config #expenseCategoriesPicker,
+#view-config #reentryCategoriesPicker,
+#view-config #expenseGroupsPicker,
+#view-config #groupBudgetPicker,
+#view-config #expenseCategoryGroupsPicker,
+#view-config #incomeSourceGroupsPicker,
+#view-config #ratesEditor,
+#view-config #budgetEditor{
+  border-width: 1px;
+  border-radius: 10px;
+  background: color-mix(in oklab, var(--card) 94%, transparent);
+}
+@media (max-width: 640px){
+  .wrap{padding: 16px 10px 30px;}
+  header{padding: 0 0 12px; border-radius: 0;}
+  .tabs{display:grid; grid-template-columns:1fr; width:100%;}
+}
