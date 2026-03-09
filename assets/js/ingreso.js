@@ -1,4 +1,4 @@
-import { el, fillSelect, fmtMoney, toBase, safeTags, normalizeTx, sortTx, todayISO, monthISO, toast, escapeHTML, maskedValue, isAnonymized, parseAmountInput, formatAmountInput } from "./utils.js";
+import { el, fillSelect, fmtMoney, toBase, safeTags, normalizeTx, sortTx, todayISO, monthISO, toast, escapeHTML, maskedValue, isAnonymized, parseAmountInput, formatAmountInput, formatAmountField } from "./utils.js";
 import { createTransaction, updateTransaction, deleteTransaction, listCategories, listTransactions, listBudgets, syncBudgetMapFromRows } from "./dataStore.js";
 export function initIngreso(state){
   // listeners de refresco externo

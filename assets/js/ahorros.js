@@ -1,4 +1,4 @@
-import { el, monthISO, toast, toBase, resolveRate, fmtMoney, isAnonymized, maskedValue } from "./utils.js";
+import { el, monthISO, toast, toBase, resolveRate, fmtMoney, isAnonymized, maskedValue, parseAmountInput } from "./utils.js";
 import { createTransaction, deleteTransaction, listTransactions, updateTransaction, listAvailableMonths, getMonth } from "./dataStore.js";
 
 const FX_CURRENCIES = ["USD", "EUR", "COP", "USDT", "USDC", "TUSD", "DJED", "DAI"];
@@ -21,8 +21,8 @@ function fillFxCurrencies(state){
 }
 
 function updateBasePreview(state){
-  const amount = Number(el("fxAmount").value);
-  const rate = Number(el("fxRate").value);
+  const amount = parseAmountInput(el("fxAmount").value);
+  const rate = parseAmountInput(el("fxRate").value);
   const currency = el("fxCurrency").value;
   if(!Number.isFinite(amount) || amount <= 0 || !Number.isFinite(rate) || rate <= 0){ el("fxBasePreview").value = ""; return; }
   const baseAmount = toBase(amount, currency, state.config, el("fxMonth").value || monthISO(), rate);
@@ -44,8 +44,8 @@ async function saveFxOperation(state){
   const month = el("fxMonth").value;
   const currency = el("fxCurrency").value;
   const type = el("fxType").value;
-  const amount = Number(el("fxAmount").value);
-  const fxRate = Number(el("fxRate").value);
+  const amount = parseAmountInput(el("fxAmount").value);
+  const fxRate = parseAmountInput(el("fxRate").value);
   const includeInNet = el("fxAffectsNet").checked;
 
   if(!month) return toast("Elegí un mes.", "danger");

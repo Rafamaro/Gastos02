@@ -1,4 +1,4 @@
-import { el, fillSelect, monthISO, escapeHTML, toast } from "./utils.js";
+import { el, fillSelect, monthISO, escapeHTML, toast, parseAmountInput } from "./utils.js";
 import {
   saveSettings,
   createGroup,
@@ -204,9 +204,9 @@ export function renderRates(state){
     const lab = document.createElement("label");
     lab.textContent = `${cur} → ${config.baseCurrency}`;
     const inp = document.createElement("input");
-    inp.type = "number";
-    inp.step = "0.0001";
-    inp.min = "0";
+    inp.type = "text";
+    inp.inputMode = "decimal";
+    inp.autocomplete = "off";
     const monthRate = Number(config.ratesByMonth?.[monthKey]?.[cur]);
     const globalRate = Number(config.ratesToBase[cur] ?? 1);
     inp.value = Number.isFinite(monthRate) && monthRate > 0 ? monthRate : globalRate;
@@ -279,7 +279,7 @@ export async function saveConfigFromUI(state){
   if(expCats.length < 1) return toast("Definí al menos 1 categoría de gasto.", "danger");
 
   const rates = { ...config.ratesToBase };
-  document.querySelectorAll("#ratesBox input[data-cur]").forEach(inp=>{ rates[inp.dataset.cur] = Number(inp.value) || 1; });
+  document.querySelectorAll("#ratesBox input[data-cur]").forEach(inp=>{ rates[inp.dataset.cur] = parseAmountInput(inp.value) || 1; });
   const monthKey = state.activeMonth || monthISO();
   const ratesByMonth = { ...(config.ratesByMonth || {}) };
   ratesByMonth[monthKey] = { ...(ratesByMonth[monthKey] || {}), ...rates };
@@ -347,9 +347,9 @@ export function renderBudgetTable(state){
         <td style="font-weight:700">${escapeHTML(name)}</td>
         <td>
           <input
-            type="number"
-            min="0"
-            step="0.01"
+            type="text"
+            inputmode="decimal"
+            autocomplete="off"
             placeholder="0"
             data-budget-key="${escapeHTML(key)}"
             value="${value > 0 ? String(value) : ""}"
@@ -365,7 +365,7 @@ export async function saveBudgetsFromUI(state){
   const payload = [];
   const keep = new Set();
   document.querySelectorAll("#tbodyBudgets input[data-budget-key]").forEach(inp=>{
-    const v = Number(inp.value);
+    const v = parseAmountInput(inp.value);
     const key = String(inp.dataset.budgetKey || "").trim();
     if(Number.isFinite(v) && v > 0 && key){
       keep.add(key);
