@@ -92,14 +92,14 @@ export function initIngreso(state){
 
   // amount hint
   el("fAmount").addEventListener("input", (ev)=>{
-    formatAmountField(ev.target);
+    formatAmountInputField(ev.target);
     updateAmountHint(state);
   });
   el("fCurrency").addEventListener("change", ()=> updateAmountHint(state));
 
   const editAmount = el("eAmount");
   if(editAmount){
-    editAmount.addEventListener("input", (ev)=> formatAmountField(ev.target));
+    editAmount.addEventListener("input", (ev)=> formatAmountInputField(ev.target));
   }
 
   // persistencia de fecha de ingreso (no volver automáticamente a hoy)
@@ -121,7 +121,7 @@ export function currentFormType(){
   return document.querySelector('input[name="fType"]:checked')?.value || "expense";
 }
 
-function formatAmountField(input){
+function formatAmountInputField(input){
   if(!input) return;
   const start = input.selectionStart ?? String(input.value || "").length;
   const digitsBefore = String(input.value || "").slice(0, start).replace(/\D/g, "").length;
