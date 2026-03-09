@@ -17,8 +17,10 @@ import {
   loadCurrentMonth,
   getUiState,
   loadComparisonMonths,
-  saveUiState
+  saveUiState,
+  setDataDirectoryHandle
 } from "./dataStore.js";
+import { ensureAuthenticatedSession } from "./authSession.js";
 
 function makeBus(){ return { emit(name, detail){ document.dispatchEvent(new CustomEvent(name, { detail })); }, on(name, fn){ document.addEventListener(name, fn); return ()=> document.removeEventListener(name, fn); } }; }
 
@@ -38,6 +40,10 @@ const state = {
 
 async function init(){
   setTheme(getTheme());
+
+  const authInfo = await ensureAuthenticatedSession();
+  if(authInfo?.dataDirHandle) setDataDirectoryHandle(authInfo.dataDirHandle);
+
   const modeInfo = await bootstrapStorage();
 
   const uiState = getUiState();
@@ -56,7 +62,7 @@ async function init(){
   el("budgetMode").value = "category";
   el("pillMonth").textContent = "Mes activo: " + state.activeMonth;
   if(el("activeMonthPicker")) el("activeMonthPicker").value = state.activeMonth;
-  if(el("pillMode")) el("pillMode").textContent = `Modo: ${modeInfo.mode === "local-folder" ? "Local (carpeta)" : "Manual"}`;
+  if(el("pillMode")) el("pillMode").textContent = `Modo: ${modeInfo.mode === "local-folder" ? "Local (carpeta)" : "Manual"}${authInfo?.user ? ` · Usuario: ${authInfo.user}` : ""}`;
 
   console.info(`[App] APP_VERSION=${APP_VERSION}`);
   const versionBadge = el("appVersionBadge");
