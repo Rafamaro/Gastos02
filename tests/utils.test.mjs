@@ -93,6 +93,6 @@ test('parseAmountInput parses grouped and decimal amount strings', () => {
 
 test('formatAmountInput adds thousand separators while typing', () => {
   assert.equal(formatAmountInput('1000000'), '1.000.000');
-  assert.equal(formatAmountInput('1234567.89'), '1.234.567,89');
-  assert.equal(formatAmountInput('12.'), '12,');
+  assert.equal(formatAmountInput('1234567,89'), '1.234.567,89');
+  assert.equal(formatAmountInput('1000,'), '1.000,');
 });
