@@ -1,6 +1,8 @@
 import { el, escapeHTML, fmtMoney, toBase, id, toast } from "./utils.js";
 import { getHouseholds, saveHouseholds } from "./dataStore.js";
 
+const MONTH_KEY_RE = /^\d{4}-\d{2}$/;
+
 function defaultPerson(){
   return { id: id(), name: "Persona", income: 0, percent: 0 };
 }
@@ -15,20 +17,80 @@ function sanitizePerson(person = {}, index = 0){
 }
 
 function normalizeHome(input = {}, state){
+  const fallbackMonth = MONTH_KEY_RE.test(String(state?.activeMonth || "")) ? state.activeMonth : new Date().toISOString().slice(0, 7);
   const persons = Array.isArray(input.persons) && input.persons.length
     ? input.persons.map((p, idx)=> sanitizePerson(p, idx))
     : [sanitizePerson({ name: "Persona 1", income: 0 }, 0), sanitizePerson({ name: "Persona 2", income: 0 }, 1)];
 
+  const versions = Array.isArray(input.versions) && input.versions.length
+    ? input.versions.map((version, idx)=> normalizeVersion(version, fallbackMonth, idx)).sort((a,b)=> a.effectiveMonth.localeCompare(b.effectiveMonth))
+    : [normalizeVersion({
+      effectiveMonth: input.createdAt ? String(input.createdAt).slice(0, 7) : fallbackMonth,
+      model: input.model,
+      groups: input.groups,
+      categories: input.categories,
+      persons
+    }, fallbackMonth, 0)];
+
   return {
     id: String(input.id || id()),
     name: String(input.name || "Hogar").trim() || "Hogar",
-    model: input.model === "personalizado" ? "personalizado" : "equitativo",
-    groups: [...new Set((input.groups || []).map(v=>String(v || "").trim()).filter(Boolean))],
-    categories: [...new Set((input.categories || []).map(v=>String(v || "").trim()).filter(Boolean))],
-    persons,
+    versions,
     createdAt: input.createdAt || new Date().toISOString(),
     updatedAt: new Date().toISOString()
   };
+}
+
+function normalizeVersion(version = {}, fallbackMonth, index = 0){
+  const persons = Array.isArray(version.persons) && version.persons.length
+    ? version.persons.map((p, idx)=> sanitizePerson(p, idx))
+    : [sanitizePerson({ name: "Persona 1", income: 0 }, 0), sanitizePerson({ name: "Persona 2", income: 0 }, 1)];
+
+  return {
+    id: String(version.id || id()),
+    effectiveMonth: MONTH_KEY_RE.test(String(version.effectiveMonth || "")) ? String(version.effectiveMonth) : fallbackMonth,
+    model: version.model === "personalizado" ? "personalizado" : "equitativo",
+    groups: [...new Set((version.groups || []).map(v=>String(v || "").trim()).filter(Boolean))],
+    categories: [...new Set((version.categories || []).map(v=>String(v || "").trim()).filter(Boolean))],
+    persons,
+    createdAt: version.createdAt || new Date().toISOString(),
+    order: index
+  };
+}
+
+function resolveVersion(home, monthKey){
+  const versions = Array.isArray(home?.versions) ? [...home.versions] : [];
+  if(!versions.length) return null;
+  const safeMonth = MONTH_KEY_RE.test(String(monthKey || "")) ? String(monthKey) : versions[versions.length - 1].effectiveMonth;
+  let picked = versions[0];
+  for(const version of versions){
+    if(version.effectiveMonth <= safeMonth) picked = version;
+  }
+  return picked;
+}
+
+function versionSnapshotEqual(a, b){
+  if(!a || !b) return false;
+  return JSON.stringify({
+    model: a.model,
+    groups: a.groups,
+    categories: a.categories,
+    persons: (a.persons || []).map(sanitizePerson)
+  }) === JSON.stringify({
+    model: b.model,
+    groups: b.groups,
+    categories: b.categories,
+    persons: (b.persons || []).map(sanitizePerson)
+  });
+}
+
+function upsertVersionByMonth(home, version){
+  const month = String(version?.effectiveMonth || "");
+  const versions = Array.isArray(home?.versions) ? [...home.versions] : [];
+  const idx = versions.findIndex(v => String(v?.effectiveMonth || "") === month);
+  if(idx >= 0) versions[idx] = normalizeVersion({ ...versions[idx], ...version }, month, idx);
+  else versions.push(normalizeVersion(version, month, versions.length));
+  return versions.sort((a,b)=> a.effectiveMonth.localeCompare(b.effectiveMonth));
 }
 
 function selectedValues(select){
@@ -39,6 +101,18 @@ function fillMulti(select, values = [], selected = []){
   if(!select) return;
   const selectedSet = new Set(selected);
   select.innerHTML = values.map(v=>`<option value="${escapeHTML(v)}" ${selectedSet.has(v) ? "selected" : ""}>${escapeHTML(v)}</option>`).join("");
+}
+
+function enableMultiToggle(select){
+  if(!select || select.dataset.multiToggleReady === "1") return;
+  select.dataset.multiToggleReady = "1";
+  select.addEventListener("mousedown", (ev)=>{
+    const option = ev.target?.closest?.("option");
+    if(!option) return;
+    ev.preventDefault();
+    option.selected = !option.selected;
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+  });
 }
 
 function resolveCategories(home, state){
@@ -79,17 +153,20 @@ export function initHogar(state){
     if(!households.length){
       if(el("tab-hogar")) el("tab-hogar").style.display = "none";
       if(el("btnEditHogar")) el("btnEditHogar").disabled = true;
+      if(el("btnDeleteHogar")) el("btnDeleteHogar").disabled = true;
       return;
     }
 
-    const current = households.find(h=> h.id === ui.currentId) || households[0];
+    const current = normalizeHome(households.find(h=> h.id === ui.currentId) || households[0], state);
     ui.currentId = current.id;
     if(el("tab-hogar")){
       el("tab-hogar").style.display = "";
       el("tab-hogar").textContent = `🏠 ${current.name}`;
     }
+    if(el("btnEditHogar")) el("btnEditHogar").disabled = false;
+    if(el("btnDeleteHogar")) el("btnDeleteHogar").disabled = false;
 
-    renderMain(state, current);
+    renderMain(state, current, resolveVersion(current, state.activeMonth));
   };
 
   state.bus.on("hogar:refresh", refresh);
@@ -110,6 +187,9 @@ export function initHogar(state){
   el("btnCloseHogarDlg")?.addEventListener("click", ()=> el("dlgHogar")?.close());
   el("btnCancelHogar")?.addEventListener("click", ()=> el("dlgHogar")?.close());
 
+  enableMultiToggle(el("hogarGroups"));
+  enableMultiToggle(el("hogarCategories"));
+
   el("hogarModel")?.addEventListener("change", ()=>{
     const model = el("hogarModel")?.value;
     const hint = model === "personalizado"
@@ -125,16 +205,24 @@ export function initHogar(state){
   });
 
   el("btnSaveHogar")?.addEventListener("click", async ()=>{
+    const pickedModel = el("hogarModel")?.value;
+    if(!pickedModel) return toast("Elegí un modelo de reparto para continuar", "warn");
     const households = await getHouseholds();
+    const original = normalizeHome(households.find(h=> h.id === ui.currentId) || {}, state);
+    const currentVersion = resolveVersion(original, state.activeMonth);
     const payload = {
-      id: ui.currentId || id(),
+      id: original.id || ui.currentId || id(),
       name: el("hogarName")?.value,
-      model: el("hogarModel")?.value,
+      model: pickedModel,
       groups: selectedValues(el("hogarGroups")),
       categories: selectedValues(el("hogarCategories")),
       persons: readDraftPersons(ui)
     };
-    const next = normalizeHome(payload, state);
+    const next = normalizeHome({ ...original, name: payload.name }, state);
+    const candidate = normalizeVersion({ ...payload, effectiveMonth: state.activeMonth }, state.activeMonth);
+    if(!currentVersion || !versionSnapshotEqual(currentVersion, candidate)){
+      next.versions = upsertVersionByMonth(next, candidate);
+    }
     const idx = households.findIndex(h=> h.id === next.id);
     if(idx >= 0) households[idx] = next;
     else households.push(next);
@@ -146,18 +234,47 @@ export function initHogar(state){
     state.bus.emit("hogar:refresh");
   });
 
-  el("btnHogarAddPerson")?.addEventListener("click", async ()=>{
+  el("btnDeleteHogar")?.addEventListener("click", async ()=>{
     const households = await getHouseholds();
     const current = households.find(h=> h.id === ui.currentId) || households[0];
     if(!current) return;
-    current.persons = [...(current.persons || []), sanitizePerson({ name: `Persona ${(current.persons || []).length + 1}` }, (current.persons || []).length)];
+    if(!window.confirm(`¿Seguro que querés borrar el hogar "${current.name}"? Esta acción no se puede deshacer.`)) return;
+    const filtered = households.filter(h=> h.id !== current.id);
+    await saveHouseholds(filtered);
+    ui.currentId = filtered[0]?.id || null;
+    toast("Hogar borrado ✅");
+    state.bus.emit("hogar:refresh");
+  });
+
+  el("btnHogarSaveModel")?.addEventListener("click", async ()=>{
+    const model = el("hogarInlineModel")?.value;
+    if(!model) return;
+    const households = await getHouseholds();
+    const home = normalizeHome(households.find(h=> h.id === ui.currentId) || households[0], state);
+    if(!home.id) return;
+    const version = resolveVersion(home, state.activeMonth);
+    const updated = normalizeVersion({ ...version, model, effectiveMonth: state.activeMonth }, state.activeMonth);
+    if(versionSnapshotEqual(version, updated)) return toast("No hay cambios para guardar", "warn");
+    home.versions = upsertVersionByMonth(home, updated);
+    await saveHouseholds(households.map(h=> h.id === home.id ? home : h));
+    toast(`Modelo actualizado desde ${state.activeMonth} ✅`);
+    state.bus.emit("hogar:refresh");
+  });
+
+  el("btnHogarAddPerson")?.addEventListener("click", async ()=>{
+    const households = await getHouseholds();
+    const current = normalizeHome(households.find(h=> h.id === ui.currentId) || households[0], state);
+    if(!current) return;
+    const version = resolveVersion(current, state.activeMonth);
+    const persons = [...(version?.persons || []), sanitizePerson({ name: `Persona ${(version?.persons || []).length + 1}` }, (version?.persons || []).length)];
+    current.versions = upsertVersionByMonth(current, normalizeVersion({ ...version, persons, effectiveMonth: state.activeMonth }, state.activeMonth));
     await saveHouseholds(households.map(h=> h.id === current.id ? current : h));
     state.bus.emit("hogar:refresh");
   });
 
   el("btnHogarSavePersons")?.addEventListener("click", async ()=>{
     const households = await getHouseholds();
-    const current = households.find(h=> h.id === ui.currentId) || households[0];
+    const current = normalizeHome(households.find(h=> h.id === ui.currentId) || households[0], state);
     if(!current) return;
 
     const rows = [...document.querySelectorAll("[data-hogar-person-row]")];
@@ -170,7 +287,9 @@ export function initHogar(state){
       }, idx)
     )).filter(p=>p.name);
 
-    current.persons = persons.length ? persons : [sanitizePerson({ name: "Persona 1" }, 0)];
+    const version = resolveVersion(current, state.activeMonth);
+    const nextPersons = persons.length ? persons : [sanitizePerson({ name: "Persona 1" }, 0)];
+    current.versions = upsertVersionByMonth(current, normalizeVersion({ ...version, persons: nextPersons, effectiveMonth: state.activeMonth }, state.activeMonth));
     await saveHouseholds(households.map(h=> h.id === current.id ? normalizeHome(current, state) : h));
     toast("Participantes guardados ✅");
     state.bus.emit("hogar:refresh");
@@ -181,15 +300,16 @@ export function initHogar(state){
 
 function openDialog(state, ui, home){
   const normalized = normalizeHome(home || {}, state);
+  const version = resolveVersion(normalized, state.activeMonth) || normalizeVersion({}, state.activeMonth);
   ui.currentId = home?.id || null;
-  ui.draftPersons = (normalized.persons || []).map((p, idx)=> sanitizePerson(p, idx));
+  ui.draftPersons = (version.persons || []).map((p, idx)=> sanitizePerson(p, idx));
 
   if(el("hogarName")) el("hogarName").value = normalized.name || "";
-  if(el("hogarModel")) el("hogarModel").value = normalized.model;
+  if(el("hogarModel")) el("hogarModel").value = home ? version.model : "";
 
-  fillMulti(el("hogarGroups"), state.config.expenseGroups || [], normalized.groups || []);
-  fillMulti(el("hogarCategories"), state.config.expenseCategories || [], normalized.categories || []);
-  renderDraftPersons(ui, normalized.model);
+  fillMulti(el("hogarGroups"), state.config.expenseGroups || [], version.groups || []);
+  fillMulti(el("hogarCategories"), state.config.expenseCategories || [], version.categories || []);
+  renderDraftPersons(ui, version.model || "equitativo");
 
   el("dlgHogar")?.showModal();
 }
@@ -247,10 +367,21 @@ function readDraftPersons(ui){
   });
 }
 
-function renderMain(state, home){
-  const categories = resolveCategories(home, state);
-  const shares = computeShares(home);
-  const expenses = state.tx.filter(tx => tx.type === "expense" && categories.includes(tx.category));
+function renderMain(state, home, version){
+  if(!version) return;
+  const scopedHome = { ...home, ...version };
+  const categories = resolveCategories(scopedHome, state);
+  const shares = computeShares(scopedHome);
+  const activeMonth = MONTH_KEY_RE.test(String(state.activeMonth || "")) ? String(state.activeMonth) : null;
+  const creationMonth = MONTH_KEY_RE.test(String(home.createdAt || "").slice(0, 7)) ? String(home.createdAt).slice(0, 7) : null;
+  const expenses = state.tx.filter(tx => {
+    if(tx.type !== "expense" || !categories.includes(tx.category)) return false;
+    const txMonth = String(tx.date || "").slice(0, 7);
+    if(!MONTH_KEY_RE.test(txMonth)) return false;
+    if(activeMonth && txMonth !== activeMonth) return false;
+    if(creationMonth && txMonth < creationMonth) return false;
+    return true;
+  });
 
   const byCategory = new Map();
   for(const tx of expenses){
@@ -259,7 +390,8 @@ function renderMain(state, home){
   }
 
   if(el("hogarTitle")) el("hogarTitle").textContent = home.name || "Hogar";
-  if(el("hogarSummary")) el("hogarSummary").textContent = `${home.model === "equitativo" ? "Modelo equitativo" : "Modelo personalizado"} · ${categories.length} categorías incluidas.`;
+  if(el("hogarSummary")) el("hogarSummary").textContent = `${version.model === "equitativo" ? "Modelo equitativo" : "Modelo personalizado"} · ${categories.length} categorías incluidas. Vigente desde ${version.effectiveMonth}.`;
+  if(el("hogarInlineModel")) el("hogarInlineModel").value = version.model;
 
   const head = el("hogarHeadRow");
   if(head){
@@ -285,11 +417,11 @@ function renderMain(state, home){
         </div>
         <div>
           <label>Ingreso</label>
-          <input type="number" min="0" step="0.01" data-hogar-income value="${p.income}" ${home.model === "personalizado" ? "disabled" : ""} />
+          <input type="number" min="0" step="0.01" data-hogar-income value="${p.income}" ${version.model === "personalizado" ? "disabled" : ""} />
         </div>
         <div>
           <label>Porcentaje</label>
-          <input type="number" min="0" max="100" step="0.01" data-hogar-percent value="${(p.share * 100).toFixed(2)}" ${home.model === "equitativo" ? "disabled" : ""} />
+          <input type="number" min="0" max="100" step="0.01" data-hogar-percent value="${(p.share * 100).toFixed(2)}" ${version.model === "equitativo" ? "disabled" : ""} />
         </div>
       </div>
     `).join("");

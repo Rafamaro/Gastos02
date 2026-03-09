@@ -407,7 +407,10 @@
       <div class="card">
         <div class="split">
           <h2 id="hogarTitle" style="margin:0">Hogar</h2>
-          <button class="btn small" id="btnEditHogar"><span aria-hidden="true">⚙️</span> Editar configuración</button>
+          <div style="display:flex; gap:8px; flex-wrap:wrap">
+            <button class="btn small" id="btnEditHogar"><span aria-hidden="true">⚙️</span> Editar configuración</button>
+            <button class="btn small danger" id="btnDeleteHogar"><span aria-hidden="true">🗑️</span> Borrar hogar</button>
+          </div>
         </div>
         <div class="hint" id="hogarSummary"></div>
 
@@ -427,6 +430,18 @@
       <div class="card">
         <h2>Personas e ingresos</h2>
         <div class="hint" style="margin-bottom:10px">Podés ajustar nombres e ingresos. En modelo equitativo, el porcentaje se calcula solo por participación del ingreso total.</div>
+        <div class="row" style="margin-bottom:10px">
+          <div>
+            <label>Forma de distribución (desde el mes activo)</label>
+            <select id="hogarInlineModel">
+              <option value="equitativo">Equitativo</option>
+              <option value="personalizado">Personalizado</option>
+            </select>
+          </div>
+          <div style="display:flex; align-items:flex-end">
+            <button class="btn" id="btnHogarSaveModel"><span aria-hidden="true">🔁</span> Cambiar distribución</button>
+          </div>
+        </div>
         <div id="hogarPersonsBox"></div>
         <div style="display:flex; gap:10px; margin-top:12px">
           <button class="btn" id="btnHogarAddPerson"><span aria-hidden="true">➕</span> Agregar persona</button>
@@ -605,6 +620,7 @@
           <div>
             <label>Modelo de reparto</label>
             <select id="hogarModel">
+              <option value="">Elegí una opción</option>
               <option value="equitativo">Equitativo (según ingreso de cada persona)</option>
               <option value="personalizado">Personalizado (porcentaje manual)</option>
             </select>
@@ -619,7 +635,7 @@
         <div style="margin-top:10px">
           <label>Incluir categorías individuales</label>
           <select id="hogarCategories" multiple style="min-height:120px"></select>
-          <div class="hint">Si elegís un grupo, se incluirán automáticamente sus categorías individuales.</div>
+          <div class="hint">Podés seleccionar múltiples opciones con clic simple (sin Ctrl). Si elegís un grupo, se incluirán automáticamente sus categorías individuales.</div>
         </div>
 
         <div style="margin-top:10px">
