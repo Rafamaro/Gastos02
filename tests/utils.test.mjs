@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { resolveRate, toBase, safeTags, buildEffectiveExpenseEntries, fmtMoney } from '../assets/js/utils.js';
+import { resolveRate, toBase, safeTags, buildEffectiveExpenseEntries, fmtMoney, parseAmountInput, formatAmountInput } from '../assets/js/utils.js';
 
 globalThis.localStorage = {
   getItem(){ return null; },
@@ -82,4 +82,17 @@ test('fmtMoney formats non-ISO tickers without throwing and appends ticker', () 
   assert.doesNotThrow(() => fmtMoney(100, 'USDT', { locale: 'en-US' }));
   const out = fmtMoney(100, 'USDT', { locale: 'en-US' });
   assert.match(out, /100\.00 USDT$/);
+});
+
+
+test('parseAmountInput parses grouped and decimal amount strings', () => {
+  assert.equal(parseAmountInput('1.234.567'), 1234567);
+  assert.equal(parseAmountInput('1.234.567,89'), 1234567.89);
+  assert.equal(parseAmountInput(''), 0);
+});
+
+test('formatAmountInput adds thousand separators while typing', () => {
+  assert.equal(formatAmountInput('1000000'), '1.000.000');
+  assert.equal(formatAmountInput('1234567.89'), '1.234.567,89');
+  assert.equal(formatAmountInput('12.'), '12,');
 });
