@@ -215,8 +215,15 @@ export async function connectDataFolder(){
   return true;
 }
 
+export function setDataDirectoryHandle(handle){
+  runtime.dirHandle = handle || null;
+  runtime.mode = runtime.dirHandle ? "local-folder" : "manual";
+  runtime.config = null;
+  runtime.monthData.clear();
+}
+
 export async function bootstrapStorage(){
-  runtime.dirHandle = isFsAccessSupported() ? await getSavedDirectory() : null;
+  if(!runtime.dirHandle) runtime.dirHandle = isFsAccessSupported() ? await getSavedDirectory() : null;
   runtime.mode = runtime.dirHandle ? "local-folder" : "manual";
   runtime.config = await getConfig();
   return {
