@@ -1,4 +1,4 @@
-import { el, escapeHTML, fmtMoney, toBase, id, toast } from "./utils.js";
+import { el, escapeHTML, fmtMoney, toBase, id, toast, parseAmountInput } from "./utils.js";
 import { getHouseholds, saveHouseholds } from "./dataStore.js";
 
 const MONTH_KEY_RE = /^\d{4}-\d{2}$/;
@@ -310,7 +310,7 @@ function renderDraftPersons(ui, model){
       </div>
       <div>
         <label>${model === "personalizado" ? "Porcentaje (%)" : "Ingreso"}</label>
-        <input type="number" min="0" max="${model === "personalizado" ? "100" : "999999999"}" step="0.01" data-draft-value value="${model === "personalizado" ? person.percent : person.income}" />
+        <input type="text" inputmode="decimal" autocomplete="off" data-draft-value value="${model === "personalizado" ? person.percent : person.income}" />
       </div>
     `;
 
@@ -338,7 +338,7 @@ function readDraftPersons(ui){
       income: current.income,
       percent: current.percent
     };
-    const value = Number(row.querySelector("[data-draft-value]")?.value) || 0;
+    const value = parseAmountInput(row.querySelector("[data-draft-value]")?.value) || 0;
     if((el("hogarModel")?.value || "equitativo") === "personalizado") base.percent = value;
     else base.income = value;
     return sanitizePerson(base, idx);
@@ -395,11 +395,11 @@ function renderMain(state, home, version){
         </div>
         <div>
           <label>Ingreso</label>
-          <input type="number" min="0" step="0.01" data-hogar-income value="${p.income}" ${version.model === "personalizado" ? "disabled" : ""} />
+          <input type="text" inputmode="decimal" autocomplete="off" data-hogar-income value="${p.income}" ${version.model === "personalizado" ? "disabled" : ""} />
         </div>
         <div>
           <label>Porcentaje</label>
-          <input type="number" min="0" max="100" step="0.01" data-hogar-percent value="${(p.share * 100).toFixed(2)}" ${version.model === "equitativo" ? "disabled" : ""} />
+          <input type="text" inputmode="decimal" autocomplete="off" data-hogar-percent value="${(p.share * 100).toFixed(2)}" ${version.model === "equitativo" ? "disabled" : ""} />
         </div>
       </div>
     `).join("");

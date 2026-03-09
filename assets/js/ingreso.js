@@ -1,4 +1,4 @@
-import { el, fillSelect, fmtMoney, toBase, safeTags, normalizeTx, sortTx, todayISO, monthISO, toast, escapeHTML, maskedValue, isAnonymized } from "./utils.js";
+import { el, fillSelect, fmtMoney, toBase, safeTags, normalizeTx, sortTx, todayISO, monthISO, toast, escapeHTML, maskedValue, isAnonymized, parseAmountInput, formatAmountInput, formatAmountField } from "./utils.js";
 import { createTransaction, updateTransaction, deleteTransaction, listCategories, listTransactions, listBudgets, syncBudgetMapFromRows } from "./dataStore.js";
 export function initIngreso(state){
   // listeners de refresco externo
@@ -91,8 +91,16 @@ export function initIngreso(state){
   });
 
   // amount hint
-  el("fAmount").addEventListener("input", ()=> updateAmountHint(state));
+  el("fAmount").addEventListener("input", (ev)=>{
+    formatAmountField(ev.target);
+    updateAmountHint(state);
+  });
   el("fCurrency").addEventListener("change", ()=> updateAmountHint(state));
+
+  const editAmount = el("eAmount");
+  if(editAmount){
+    editAmount.addEventListener("input", (ev)=> formatAmountField(ev.target));
+  }
 
   // persistencia de fecha de ingreso (no volver automáticamente a hoy)
   if(!state.ingresoFormDate) state.ingresoFormDate = el("fDate").value || todayISO();
@@ -236,7 +244,7 @@ function refreshLinkedExpenseOptions(state, { isEdit = false } = {}){
 
 export function updateAmountHint(state){
   const config = state.config;
-  const a = Number(el("fAmount").value) || 0;
+  const a = parseAmountInput(el("fAmount").value) || 0;
   const c = el("fCurrency").value;
   const base = toBase(a, c, config, el("fDate").value || todayISO());
 
@@ -280,7 +288,7 @@ async function reloadFromStorageAndRender(state){
 
 export async function addTx(state){
   const config = state.config;
-  const amount = Number(el("fAmount").value);
+  const amount = parseAmountInput(el("fAmount").value);
   if(!Number.isFinite(amount) || amount<=0){
     toast("Poné un monto válido (>0).", "danger");
     el("fAmount").focus();
@@ -441,7 +449,7 @@ export async function openEdit(state, txId){
   refreshLinkedExpenseOptions(state, { isEdit: true });
 
   el("eDate").value = x.date;
-  el("eAmount").value = x.amount;
+  el("eAmount").value = formatAmountInput(x.amount);
   el("eCurrency").value = x.currency;
 
   // después del refreshCategorySelects
@@ -465,7 +473,7 @@ export async function saveEdit(state){
   const idx = state.tx.findIndex(e => e.id === idv);
   if(idx < 0){ toast("No se encontró.", "danger"); return; }
 
-  const amount = Number(el("eAmount").value);
+  const amount = parseAmountInput(el("eAmount").value);
   if(!Number.isFinite(amount) || amount<=0){
     toast("Monto inválido.", "danger");
     return;
