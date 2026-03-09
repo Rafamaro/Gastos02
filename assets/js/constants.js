@@ -1,4 +1,4 @@
-export const APP_VERSION = "2.31";
+export const APP_VERSION = "2.32";
 
 export const LS = {
   THEME: "mov_theme_v2"
@@ -21,6 +21,7 @@ export const defaults = {
   ratesToBase: { ARS: 1, USD: 1050, EUR: 1150, COP: 0.27, USDT: 1050, USDC: 1050, TUSD: 1050, DJED: 1050, DAI: 1050 },
   ratesByMonth: {},
   budgets: {},
+  households: [],
 
   // compat nuevo esquema
   version: 1,

@@ -6,6 +6,7 @@ import { initIngreso } from "./ingreso.js";
 import { initDashboard } from "./dashboard.js";
 import { initAhorros } from "./ahorros.js";
 import { initConfig } from "./config.js";
+import { initHogar } from "./hogar.js";
 import { initExport } from "./export.js";
 import {
   getSettings,
@@ -70,6 +71,7 @@ async function init(){
     state.bus.emit("dashboard:refresh");
     state.bus.emit("ingreso:refresh");
     state.bus.emit("ahorros:refresh");
+    state.bus.emit("hogar:refresh");
   });
 
   fillSelect(el("fCurrency"), state.config.currencies);
@@ -84,12 +86,14 @@ async function init(){
   initDashboard(state);
   initAhorros(state);
   initConfig(state);
+  initHogar(state);
   initExport(state);
 
   state.bus.emit("dashboard:refresh");
   state.bus.emit("ingreso:refresh");
   state.bus.emit("ahorros:refresh");
   state.bus.emit("config:refresh");
+  state.bus.emit("hogar:refresh");
 
   if(!modeInfo.connected) toast("Sin carpeta conectada. Usá “Elegir carpeta de datos” o modo manual.", "warn");
   if(!modeInfo.fsSupported) toast("Modo carpeta requiere Chrome/Edge moderno. Usá modo manual.", "warn");

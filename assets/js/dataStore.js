@@ -84,6 +84,7 @@ function normalizeLegacyConfig(cfg = {}){
   }
 
   if(!out.budgets || typeof out.budgets !== "object") out.budgets = {};
+  out.households = Array.isArray(out.households) ? out.households : [];
 
   return out;
 }
@@ -115,7 +116,8 @@ function toConfigFileShape(legacyCfg){
     expenseCategoryGroups: cfg.expenseCategoryGroups,
     ratesToBase: cfg.ratesToBase,
     ratesByMonth: cfg.ratesByMonth,
-    budgets: cfg.budgets
+    budgets: cfg.budgets,
+    households: cfg.households || []
   };
 }
 
@@ -136,6 +138,7 @@ function mergeConfigValues(baseCfg = {}, incoming = {}){
     incomeCategories: uniqueTrimmed([...(base.incomeCategories || []), ...((inc.incomeCategories || []).map(String))]),
     reentryCategories: uniqueTrimmed([...(base.reentryCategories || []), ...((inc.reentryCategories || []).map(String))]),
     expenseGroups: uniqueTrimmed([...(base.expenseGroups || []), ...((inc.expenseGroups || []).map(String))]),
+    households: Array.isArray(inc.households) ? inc.households : (base.households || []),
     expenseCategoryGroups: { ...(base.expenseCategoryGroups || {}), ...(inc.expenseCategoryGroups || {}) },
     ratesToBase: { ...(base.ratesToBase || {}), ...(inc.ratesToBase || {}) },
     ratesByMonth: { ...(base.ratesByMonth || {}), ...(inc.ratesByMonth || {}) },
@@ -330,6 +333,19 @@ export async function saveSettings(payload){
 }
 
 export async function listCurrencies(){ return (runtime.config?.currencies || (await getConfig()).currencies).map(code => ({ code })); }
+
+export async function getHouseholds(){
+  const cfg = await getConfig();
+  return Array.isArray(cfg.households) ? cfg.households : [];
+}
+
+export async function saveHouseholds(households = []){
+  const cfg = await getConfig();
+  cfg.households = Array.isArray(households) ? households : [];
+  await persistCurrentConfig();
+  return cfg.households;
+}
+
 
 export async function listGroups(){
   const cfg = await getConfig();
