@@ -11,6 +11,8 @@
       --warn: #f59e0b;
       --shadow: 0 10px 30px rgba(2,6,23,.08);
       --radius: 16px;
+      --radius-sm: 12px;
+      --radius-lg: 22px;
       --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
       --sans: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, "Noto Sans", "Helvetica Neue", sans-serif;
     }
@@ -36,6 +38,7 @@
                   radial-gradient(1000px 700px at 95% 0%, rgba(245,158,11,.10), transparent 55%),
                   var(--bg);
       color: var(--text);
+      line-height: 1.45;
     }
     .wrap{
       max-width: 1180px;
@@ -47,7 +50,13 @@
       align-items:center;
       justify-content:space-between;
       gap:12px;
-      margin-bottom: 14px;
+      margin-bottom: 16px;
+      padding: 14px;
+      border-radius: var(--radius-lg);
+      background: color-mix(in oklab, var(--card) 90%, transparent);
+      border: 1px solid color-mix(in oklab, var(--border) 88%, transparent);
+      box-shadow: 0 12px 28px rgba(15, 23, 42, .06);
+      backdrop-filter: blur(8px);
     }
     .brand{
       display:flex;
@@ -98,7 +107,12 @@
       display:flex;
       gap:8px;
       flex-wrap:wrap;
-      margin: 10px 0 16px;
+      margin: 10px 0 18px;
+      padding: 6px;
+      border-radius: 999px;
+      width: fit-content;
+      background: color-mix(in oklab, var(--card) 92%, transparent);
+      border: 1px solid color-mix(in oklab, var(--border) 90%, transparent);
     }
     .tab{
       border: 1px solid var(--border);
@@ -109,8 +123,13 @@
       font-weight:600;
       font-size: 13px;
       color: var(--muted);
-      transition: .15s ease;
+      transition: .2s ease;
       user-select:none;
+    }
+    .tab:hover{
+      color: var(--text);
+      border-color: color-mix(in oklab, var(--primary) 24%, var(--border));
+      background: color-mix(in oklab, var(--primary) 7%, var(--card));
     }
     .tab[aria-selected="true"]{
       background: linear-gradient(135deg, color-mix(in oklab, var(--primary) 18%, var(--card)),
@@ -135,14 +154,14 @@
     .card{
       background: var(--card);
       border: 1px solid var(--border);
-      border-radius: var(--radius);
-      box-shadow: var(--shadow);
-      padding: 14px;
+      border-radius: var(--radius-lg);
+      box-shadow: 0 16px 36px rgba(2, 6, 23, .07);
+      padding: 16px;
     }
     .card h2{
-      margin:0 0 10px;
-      font-size: 14px;
-      letter-spacing:.2px;
+      margin:0 0 12px;
+      font-size: 15px;
+      letter-spacing:.15px;
     }
     .muted{color: var(--muted)}
     .row{
@@ -163,13 +182,13 @@
     }
     input, select, textarea{
       width:100%;
-      padding: 10px 10px;
-      border-radius: 12px;
+      padding: 10px 11px;
+      border-radius: var(--radius-sm);
       border: 1px solid var(--border);
       background: color-mix(in oklab, var(--card) 92%, transparent);
       color: var(--text);
       outline:none;
-      transition: .12s ease;
+      transition: .16s ease;
     }
     textarea{min-height: 84px; resize: vertical}
     input:focus, select:focus, textarea:focus{
@@ -182,17 +201,17 @@
       background: color-mix(in oklab, var(--card) 94%, transparent);
       color: var(--text);
       padding: 10px 12px;
-      border-radius: 12px;
+      border-radius: var(--radius-sm);
       cursor:pointer;
       font-weight:700;
       font-size: 13px;
-      transition: .12s ease;
+      transition: .18s ease;
       display:inline-flex;
       align-items:center;
       gap:8px;
       user-select:none;
     }
-    .btn:hover{transform: translateY(-1px)}
+    .btn:hover{transform: translateY(-1px); box-shadow: 0 8px 20px rgba(15,23,42,.08)}
     .btn:active{transform: translateY(0)}
     .btn.primary{
       background: linear-gradient(135deg, var(--primary), var(--primary-2));
@@ -221,6 +240,7 @@
       font-size: 12px;
       color: var(--muted);
       background: color-mix(in oklab, var(--card) 94%, transparent);
+      font-weight: 600;
     }
 
     .split{
@@ -287,7 +307,7 @@
       border-collapse: separate;
       border-spacing: 0;
       overflow:hidden;
-      border-radius: 14px;
+      border-radius: var(--radius);
       border: 1px solid var(--border);
       background: color-mix(in oklab, var(--card) 95%, transparent);
     }
@@ -296,6 +316,9 @@
       font-size: 12px;
       border-bottom: 1px solid var(--border);
       vertical-align: top;
+    }
+    .table tbody tr:hover td{
+      background: color-mix(in oklab, var(--primary) 4%, var(--card));
     }
     .table th{
       text-align:left;
@@ -331,6 +354,7 @@
       border-radius: 14px;
       padding: 12px;
       background: color-mix(in oklab, var(--card) 94%, transparent);
+      box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--card) 80%, transparent);
     }
     .kpi .label{font-size:12px;color:var(--muted);font-weight:900}
     .kpi .value{font-size:18px;font-weight:900;margin-top:6px}
@@ -349,7 +373,7 @@
     .chartbox{
       padding: 12px;
       border: 1px solid var(--border);
-      border-radius: 16px;
+      border-radius: var(--radius);
       background: color-mix(in oklab, var(--card) 95%, transparent);
     }
     .chartbox h3{
@@ -392,7 +416,7 @@
       font-size: 12px;
       color: var(--muted);
       margin-top: 6px;
-      line-height: 1.35;
+      line-height: 1.45;
     }
 
     .badge{
@@ -446,7 +470,8 @@
 
     @media (max-width: 640px){
       .wrap{padding: 14px 10px 28px;}
-      .tabs{display:grid; grid-template-columns:1fr;}
+      header{padding: 12px; border-radius: var(--radius);}
+      .tabs{display:grid; grid-template-columns:1fr; width:100%; border-radius: var(--radius);}
       .tab{text-align:center;}
       .top-actions{width:100%;}
       .top-actions .btn,
