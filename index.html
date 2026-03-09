@@ -51,7 +51,7 @@
     <section class="grid" id="view-ahorros" role="tabpanel" aria-labelledby="tab-ahorros" data-view="ahorros" style="display:none">
       <div class="card">
         <h2>Dashboard de ahorros</h2>
-        <div class="hint">Consolidado histórico de ahorros en todas las divisas usando tasas de Config para expresar total en USD.</div>
+
         <div class="kpi" id="fxKpi" style="margin-top:10px"></div>
         <div class="charts">
           <div class="chartbox">
@@ -69,7 +69,7 @@
 
       <div class="card">
         <h2>Compra / venta de divisas por mes</h2>
-        <div class="hint">La compra se registra como gasto (resta del neto). La venta se registra como movimiento que suma al neto, sin sumar al KPI de ingresos.</div>
+
 
         <div class="row" style="margin-top:10px">
           <div>
@@ -158,7 +158,7 @@
               <label><input type="radio" name="fType" value="income" /> Ingreso</label>
               <label><input type="radio" name="fType" value="reentry" /> Reintegro</label>
             </div>
-            <div class="hint" id="hintType">Los presupuestos se aplican a gastos.</div>
+            <div class="hint" id="hintType"></div>
           </div>
           <div>
             <label>Fecha</label>
@@ -215,7 +215,7 @@
             <select id="fLinkedExpense">
               <option value="">(Ninguno)</option>
             </select>
-            <div class="hint">Si lo vinculás, el reintegro descontará el gasto de la categoría original.</div>
+            <div class="hint"></div>
           </div>
           <div></div>
         </div>
@@ -235,9 +235,7 @@
           <button class="btn" id="btnClear"><span aria-hidden="true">🧽</span> Limpiar</button>
         </div>
 
-        <div class="hint">
-          *Guarda localmente en tu navegador (localStorage). Para multi-dispositivo, después lo conectás a DB/API.
-        </div>
+
       </div>
 
       <div class="card">
@@ -307,7 +305,7 @@
       <div class="split">
         <div>
           <h2 style="margin:0">Dashboard</h2>
-          <div class="hint">Resumen en moneda base, neto (ingresos - gastos) y alertas por presupuesto (solo gastos).</div>
+
         </div>
         <div class="dashboard-controls">
           <div>
@@ -369,7 +367,7 @@
           <div style="margin-bottom:10px">
             <label id="labDashBreakdownEntity">Elegir categoría/grupo para comparativa</label>
             <select id="dashBreakdownEntity"></select>
-            <div class="hint" id="hintDashBreakdownEntity" style="margin-top:4px">Elegí una entidad para ver su comparativa en el período seleccionado.</div>
+            <div class="hint" id="hintDashBreakdownEntity" style="margin-top:4px"></div>
           </div>
           <canvas id="chartMonthlyBreakdown" height="140"></canvas>
           <div class="hint" id="fallbackMonthlyBreakdown" style="display:none"></div>
@@ -382,7 +380,7 @@
         <div class="chartbox">
           <h3>Presupuesto (gastos)</h3>
           <div id="budgetStatus"></div>
-          <div class="hint">Si una categoría supera el 100%, queda “peligro”.</div>
+
         </div>
       </div>
 
@@ -410,7 +408,7 @@
           <div>
             <label>Moneda base</label>
             <select id="baseCurrency"></select>
-            <div class="hint">Todo el dashboard se expresa en esta moneda.</div>
+
           </div>
           <div>
             <label>Formato numérico</label>
@@ -420,7 +418,7 @@
               <option value="en-US">en-US</option>
               <option value="es-ES">es-ES</option>
             </select>
-            <div class="hint">Solo afecta cómo se muestra, no el cálculo.</div>
+
           </div>
         </div>
 
@@ -428,7 +426,7 @@
           <div>
             <label>Divisas habilitadas</label>
             <div id="currenciesPicker"></div>
-            <div class="hint">Podés agregar o quitar divisas/criptomonedas para todos los movimientos.</div>
+
           </div>
         </div>
 
@@ -436,12 +434,12 @@
           <div>
             <label>Categorías de gastos</label>
             <div id="expenseCategoriesPicker"></div>
-            <div class="hint">Usá el desplegable para elegir, “➕ Agregar nuevo...” para crear y “Quitar seleccionada” para eliminar.</div>
+
           </div>
           <div>
             <label>Categorías de ingresos</label>
             <div id="incomeCategoriesPicker"></div>
-            <div class="hint">Usá el desplegable para elegir, “➕ Agregar nuevo...” para crear y “Quitar seleccionada” para eliminar.</div>
+
           </div>
         </div>
 
@@ -449,18 +447,18 @@
           <div>
             <label>Categorías de reintegros</label>
             <div id="reentryCategoriesPicker"></div>
-            <div class="hint">Categorías específicas para reintegros. Suman al neto, pero no al KPI de ingresos.</div>
+
           </div>
         </div>
 
         <div style="margin-top:12px">
           <h2 style="margin:0 0 10px">Grupos de categorías de gastos</h2>
-          <div class="hint">Creá grupos grandes (ej: Esenciales, Trabajo) y asigná cada categoría para ver estadísticas agrupadas en el dashboard.</div>
+
 
           <div style="margin-top:10px">
             <label>Grupos disponibles</label>
             <div id="expenseGroupsPicker"></div>
-            <div class="hint">Podés agregar o quitar el grupo actualmente seleccionado desde los botones.</div>
+
           </div>
 
           <div style="margin-top:12px; max-height: 320px; overflow:auto; border-radius: 14px;">
@@ -478,7 +476,7 @@
 
         <div style="margin-top:12px">
           <h2 style="margin:0 0 10px">Tasas de cambio (hacia moneda base)</h2>
-          <div class="hint">Si tu base es ARS: USD→ARS = 1050 (ej). Si no querés conversión, poné 1.</div>
+
           <div id="ratesBox" style="display:grid; gap:10px; margin-top:10px"></div>
         </div>
 
@@ -491,7 +489,7 @@
 
       <div class="card">
         <h2>Almacenamiento local</h2>
-        <div class="hint">Almacenamiento por carpeta con File System Access API (Chrome/Edge). Si no está disponible, podés importar/exportar JSON manualmente.</div>
+
         <div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:12px">
           <button class="btn primary" id="btnChooseFolder">Elegir carpeta de datos</button>
           <button class="btn primary" id="btnSaveConfig"><span aria-hidden="true">✅</span> Guardar configuración</button>
@@ -524,7 +522,7 @@
       </div>
       <div class="card">
         <h2>Presupuestos mensuales de gastos</h2>
-        <div class="hint">Podés definir límites por categoría o por grupo. Si queda vacío, no se evalúa.</div>
+
 
         <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:end">
           <div style="min-width: 220px">
@@ -618,7 +616,7 @@
             <select id="eLinkedExpense">
               <option value="">(Ninguno)</option>
             </select>
-            <div class="hint">Si lo vinculás, el reintegro descontará el gasto de la categoría original.</div>
+            <div class="hint"></div>
           </div>
           <div></div>
         </div>
