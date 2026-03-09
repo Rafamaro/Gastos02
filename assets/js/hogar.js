@@ -84,6 +84,15 @@ function versionSnapshotEqual(a, b){
   });
 }
 
+function upsertVersionByMonth(home, version){
+  const month = String(version?.effectiveMonth || "");
+  const versions = Array.isArray(home?.versions) ? [...home.versions] : [];
+  const idx = versions.findIndex(v => String(v?.effectiveMonth || "") === month);
+  if(idx >= 0) versions[idx] = normalizeVersion({ ...versions[idx], ...version }, month, idx);
+  else versions.push(normalizeVersion(version, month, versions.length));
+  return versions.sort((a,b)=> a.effectiveMonth.localeCompare(b.effectiveMonth));
+}
+
 function selectedValues(select){
   return [...(select?.selectedOptions || [])].map(o=>String(o.value || "").trim()).filter(Boolean);
 }
@@ -92,6 +101,18 @@ function fillMulti(select, values = [], selected = []){
   if(!select) return;
   const selectedSet = new Set(selected);
   select.innerHTML = values.map(v=>`<option value="${escapeHTML(v)}" ${selectedSet.has(v) ? "selected" : ""}>${escapeHTML(v)}</option>`).join("");
+}
+
+function enableMultiToggle(select){
+  if(!select || select.dataset.multiToggleReady === "1") return;
+  select.dataset.multiToggleReady = "1";
+  select.addEventListener("mousedown", (ev)=>{
+    const option = ev.target?.closest?.("option");
+    if(!option) return;
+    ev.preventDefault();
+    option.selected = !option.selected;
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+  });
 }
 
 function resolveCategories(home, state){
@@ -166,6 +187,9 @@ export function initHogar(state){
   el("btnCloseHogarDlg")?.addEventListener("click", ()=> el("dlgHogar")?.close());
   el("btnCancelHogar")?.addEventListener("click", ()=> el("dlgHogar")?.close());
 
+  enableMultiToggle(el("hogarGroups"));
+  enableMultiToggle(el("hogarCategories"));
+
   el("hogarModel")?.addEventListener("change", ()=>{
     const model = el("hogarModel")?.value;
     const hint = model === "personalizado"
@@ -197,7 +221,7 @@ export function initHogar(state){
     const next = normalizeHome({ ...original, name: payload.name }, state);
     const candidate = normalizeVersion({ ...payload, effectiveMonth: state.activeMonth }, state.activeMonth);
     if(!currentVersion || !versionSnapshotEqual(currentVersion, candidate)){
-      next.versions = [...(next.versions || []), candidate].sort((a,b)=> a.effectiveMonth.localeCompare(b.effectiveMonth));
+      next.versions = upsertVersionByMonth(next, candidate);
     }
     const idx = households.findIndex(h=> h.id === next.id);
     if(idx >= 0) households[idx] = next;
@@ -231,7 +255,7 @@ export function initHogar(state){
     const version = resolveVersion(home, state.activeMonth);
     const updated = normalizeVersion({ ...version, model, effectiveMonth: state.activeMonth }, state.activeMonth);
     if(versionSnapshotEqual(version, updated)) return toast("No hay cambios para guardar", "warn");
-    home.versions = [...(home.versions || []), updated].sort((a,b)=> a.effectiveMonth.localeCompare(b.effectiveMonth));
+    home.versions = upsertVersionByMonth(home, updated);
     await saveHouseholds(households.map(h=> h.id === home.id ? home : h));
     toast(`Modelo actualizado desde ${state.activeMonth} ✅`);
     state.bus.emit("hogar:refresh");
@@ -243,8 +267,7 @@ export function initHogar(state){
     if(!current) return;
     const version = resolveVersion(current, state.activeMonth);
     const persons = [...(version?.persons || []), sanitizePerson({ name: `Persona ${(version?.persons || []).length + 1}` }, (version?.persons || []).length)];
-    current.versions = [...(current.versions || []), normalizeVersion({ ...version, persons, effectiveMonth: state.activeMonth }, state.activeMonth)]
-      .sort((a,b)=> a.effectiveMonth.localeCompare(b.effectiveMonth));
+    current.versions = upsertVersionByMonth(current, normalizeVersion({ ...version, persons, effectiveMonth: state.activeMonth }, state.activeMonth));
     await saveHouseholds(households.map(h=> h.id === current.id ? current : h));
     state.bus.emit("hogar:refresh");
   });
@@ -266,8 +289,7 @@ export function initHogar(state){
 
     const version = resolveVersion(current, state.activeMonth);
     const nextPersons = persons.length ? persons : [sanitizePerson({ name: "Persona 1" }, 0)];
-    current.versions = [...(current.versions || []), normalizeVersion({ ...version, persons: nextPersons, effectiveMonth: state.activeMonth }, state.activeMonth)]
-      .sort((a,b)=> a.effectiveMonth.localeCompare(b.effectiveMonth));
+    current.versions = upsertVersionByMonth(current, normalizeVersion({ ...version, persons: nextPersons, effectiveMonth: state.activeMonth }, state.activeMonth));
     await saveHouseholds(households.map(h=> h.id === current.id ? normalizeHome(current, state) : h));
     toast("Participantes guardados ✅");
     state.bus.emit("hogar:refresh");

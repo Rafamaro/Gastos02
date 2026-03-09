@@ -121,6 +121,28 @@ export function currentFormType(){
   return document.querySelector('input[name="fType"]:checked')?.value || "expense";
 }
 
+function formatAmountField(input){
+  if(!input) return;
+  const start = input.selectionStart ?? String(input.value || "").length;
+  const digitsBefore = String(input.value || "").slice(0, start).replace(/\D/g, "").length;
+
+  input.value = formatAmountInput(input.value);
+
+  const formatted = String(input.value || "");
+  if(typeof input.setSelectionRange === "function"){
+    let seenDigits = 0;
+    let next = formatted.length;
+    for(let i = 0; i < formatted.length; i += 1){
+      if(/\d/.test(formatted[i])) seenDigits += 1;
+      if(seenDigits >= digitsBefore){
+        next = i + 1;
+        break;
+      }
+    }
+    input.setSelectionRange(next, next);
+  }
+}
+
 function unionCategories(config){
   const set = new Set([...(config.expenseCategories||[]), ...(config.incomeCategories||[]), ...(config.reentryCategories||[])]);
   return [...set];
