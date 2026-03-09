@@ -40,4 +40,5 @@ export function setTab(state, name){
   if(name === "ingreso") state.bus.emit("ingreso:refresh");
   if(name === "config") state.bus.emit("config:refresh");
   if(name === "ahorros") state.bus.emit("ahorros:refresh");
+  if(name === "hogar") state.bus.emit("hogar:refresh");
 }

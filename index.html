@@ -31,6 +31,7 @@
                 <span class="pill" id="pillMonth"></span>
         <button class="btn small" id="btnTheme" title="Cambiar tema"><span aria-hidden="true">🌓</span> Tema</button>
         <button class="btn small" id="btnAnonymize" title="Anonimizar valores"><span id="anonymizeIcon" aria-hidden="true">👁️</span> <span id="anonymizeLabel">Visible</span></button>
+        <button class="btn small" id="btnSetupHogar" title="Configurar hogar"><span aria-hidden="true">🏠</span> Hogar</button>
         <button class="btn small" id="btnExport" title="Guardar JSON"><span aria-hidden="true">💾</span> Guardar</button>
         <label class="btn small" title="Importar JSON" style="cursor:pointer">
           <input id="fileImport" type="file" accept="application/json" style="display:none" />
@@ -44,6 +45,7 @@
       <button class="tab" type="button" id="tab-ingreso" role="tab" data-tab="ingreso" aria-controls="view-ingreso" tabindex="0" aria-selected="true">➕ Ingreso</button>
       <button class="tab" type="button" id="tab-ahorros" role="tab" data-tab="ahorros" aria-controls="view-ahorros" tabindex="-1" aria-selected="false">💱 Ahorros e INVERSIONES</button>
       <button class="tab" type="button" id="tab-dashboard" role="tab" data-tab="dashboard" aria-controls="view-dashboard" tabindex="-1" aria-selected="false">📊 Dashboard</button>
+      <button class="tab" type="button" id="tab-hogar" role="tab" data-tab="hogar" aria-controls="view-hogar" tabindex="-1" aria-selected="false" style="display:none">🏠 Hogar</button>
       <button class="tab" type="button" id="tab-config" role="tab" data-tab="config" aria-controls="view-config" tabindex="-1" aria-selected="false">⚙️ Config</button>
     </nav>
 
@@ -399,6 +401,39 @@
       </div>
     </section>
 
+
+    <!-- HOGAR -->
+    <section class="grid" id="view-hogar" role="tabpanel" aria-labelledby="tab-hogar" data-view="hogar" style="display:none">
+      <div class="card">
+        <div class="split">
+          <h2 id="hogarTitle" style="margin:0">Hogar</h2>
+          <button class="btn small" id="btnEditHogar"><span aria-hidden="true">⚙️</span> Editar configuración</button>
+        </div>
+        <div class="hint" id="hogarSummary"></div>
+
+        <div class="table-wrap" style="margin-top:12px">
+          <table class="table" aria-label="Distribución de gastos del hogar">
+            <thead>
+              <tr id="hogarHeadRow">
+                <th>Categoría</th>
+                <th>Gasto</th>
+              </tr>
+            </thead>
+            <tbody id="tbodyHogar"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Personas e ingresos</h2>
+        <div class="hint" style="margin-bottom:10px">Podés ajustar nombres e ingresos. En modelo equitativo, el porcentaje se calcula solo por participación del ingreso total.</div>
+        <div id="hogarPersonsBox"></div>
+        <div style="display:flex; gap:10px; margin-top:12px">
+          <button class="btn" id="btnHogarAddPerson"><span aria-hidden="true">➕</span> Agregar persona</button>
+          <button class="btn primary" id="btnHogarSavePersons"><span aria-hidden="true">💾</span> Guardar cambios</button>
+        </div>
+      </div>
+    </section>
     <!-- CONFIG -->
     <section class="grid" id="view-config" role="tabpanel" aria-labelledby="tab-config" data-view="config" style="display:none">
       <div class="card">
@@ -554,7 +589,52 @@
       </div>
     </section>
 
-    <dialog id="dlgEdit">
+    
+    <dialog id="dlgHogar">
+      <div class="modal-head">
+        <strong>Configurar Hogar</strong>
+        <button class="btn small ghost" id="btnCloseHogarDlg" aria-label="Cerrar">✖</button>
+      </div>
+      <div class="modal-body">
+        <div>
+          <label>Nombre de la vista</label>
+          <input type="text" id="hogarName" placeholder="Ej: Hogar principal" />
+        </div>
+
+        <div class="row" style="margin-top:10px">
+          <div>
+            <label>Modelo de reparto</label>
+            <select id="hogarModel">
+              <option value="equitativo">Equitativo (según ingreso de cada persona)</option>
+              <option value="personalizado">Personalizado (porcentaje manual)</option>
+            </select>
+            <div class="hint" id="hogarModelHint">Equitativo: se suman ingresos y cada gasto se divide por la proporción de ingreso de cada persona.</div>
+          </div>
+          <div>
+            <label>Incluir grupos</label>
+            <select id="hogarGroups" multiple style="min-height:100px"></select>
+          </div>
+        </div>
+
+        <div style="margin-top:10px">
+          <label>Incluir categorías individuales</label>
+          <select id="hogarCategories" multiple style="min-height:120px"></select>
+          <div class="hint">Si elegís un grupo, se incluirán automáticamente sus categorías individuales.</div>
+        </div>
+
+        <div style="margin-top:10px">
+          <label>Personas del hogar</label>
+          <div id="hogarPersonsDraft"></div>
+          <button class="btn small" id="btnHogarDraftAddPerson" type="button" style="margin-top:8px"><span aria-hidden="true">➕</span> Agregar persona</button>
+        </div>
+      </div>
+
+      <div class="modal-foot">
+        <button class="btn" id="btnCancelHogar">Cancelar</button>
+        <button class="btn primary" id="btnSaveHogar">Guardar hogar</button>
+      </div>
+    </dialog>
+<dialog id="dlgEdit">
       <div class="modal-head">
         <strong>Editar movimiento</strong>
         <button class="btn small ghost" id="btnCloseDlg" aria-label="Cerrar">✖</button>
@@ -672,7 +752,7 @@
   </script>
 
   <script>
-    window.__APP_VERSION__ = "2.31";
+    window.__APP_VERSION__ = "2.32";
   </script>
   <script type="module" src="/assets/js/app.js"></script>
 </body>
