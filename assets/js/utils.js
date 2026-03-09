@@ -123,6 +123,39 @@ export function safeTags(str){
     .slice(0, 12);
 }
 
+export function parseAmountInput(value){
+  const raw = String(value ?? "").trim();
+  if(!raw) return 0;
+
+  const normalized = raw
+    .replace(/\s+/g, "")
+    .replace(/\./g, "")
+    .replace(/,/g, ".")
+    .replace(/[^\d.-]/g, "");
+
+  const n = Number(normalized);
+  return Number.isFinite(n) ? n : NaN;
+}
+
+export function formatAmountInput(value){
+  const raw = String(value ?? "");
+  const trimmed = raw.trim();
+  if(!trimmed) return "";
+
+  const sign = trimmed.startsWith("-") ? "-" : "";
+  const cleaned = trimmed.replace(/\s+/g, "").replace(/,/g, ".").replace(/[^\d.]/g, "");
+  if(!cleaned) return sign;
+
+  const hasTrailingDot = cleaned.endsWith(".");
+  const [intRaw = "", ...decimalParts] = cleaned.split(".");
+  const decimal = decimalParts.join("");
+  const integer = intRaw.replace(/^0+(?=\d)/, "") || "0";
+  const grouped = integer.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+
+  if(decimal || hasTrailingDot) return `${sign}${grouped},${decimal}`;
+  return `${sign}${grouped}`;
+}
+
 export function normalizeTx(x, config){
   const type = (x.type==="income" || x.type==="expense" || x.type==="reentry") ? x.type : "expense";
   const linkedExpenseId = String(x.linkedExpenseId || "").trim();
