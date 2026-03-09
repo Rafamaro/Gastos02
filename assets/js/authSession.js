@@ -1,3 +1,4 @@
+import { defaults } from "./constants.js";
 import { chooseDataDirectory, getSavedDirectory, isFsAccessSupported, readJsonFile, writeJsonFile } from "./storage/fsAccess.js";
 
 const USERS_FILE = "users.json";
@@ -24,6 +25,7 @@ function fromBase64(value){
 
 function normalizeUsername(value){ return String(value || "").trim().toLowerCase(); }
 function slug(value){ return String(value || "").trim().toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-_]/g, ""); }
+function unique(values = []){ return [...new Set(values.map(v => String(v || "").trim().toUpperCase()).filter(Boolean))]; }
 
 async function deriveBits(password, salt){
   ensureCrypto();
@@ -54,17 +56,35 @@ async function verifyPassword(password, record){
   return digest === record.hash;
 }
 
+function buildInitialConfig(baseCurrency){
+  const selected = String(baseCurrency || defaults.baseCurrency || "ARS").toUpperCase();
+  const currencies = unique([selected, ...(defaults.currencies || [])]);
+  const ratesToBase = { ...(defaults.ratesToBase || {}) };
+  ratesToBase[selected] = 1;
+
+  return {
+    ...structuredClone(defaults),
+    baseCurrency: selected,
+    currency: selected,
+    currencies,
+    ratesToBase
+  };
+}
+
+async function createInitialUserConfig(userDir, baseCurrency){
+  const existing = await readJsonFile(userDir, "config.json");
+  if(existing) return;
+  await writeJsonFile(userDir, "config.json", buildInitialConfig(baseCurrency));
+}
+
 function buildAuthOverlay(hasRoot){
-  const logoSrc = encodeURI("./WhatsApp Image 2026-02-03 at 22.23.15.jpeg");
+  const currencyOptions = unique(defaults.currencies || [defaults.baseCurrency || "ARS"]);
   const root = document.createElement("div");
   root.className = "auth-overlay";
   root.innerHTML = `
     <div class="auth-card">
-      <div class="auth-hero">
-        <img src="${logoSrc}" alt="Logo de Gastos" class="auth-logo" />
-      </div>
       <h2>Ingreso seguro</h2>
-      <p class="muted">Ingresá de forma simple y segura. Cada usuario guarda datos en su propia carpeta.</p>
+      <p class="muted">Seleccioná o creá tu usuario. Cada usuario guarda datos en su propia carpeta.</p>
       <button id="authChooseFolder" type="button" class="btn" style="display:${hasRoot ? "none" : "block"}">Elegir carpeta de datos</button>
       <div class="auth-tabs" style="display:${hasRoot ? "flex" : "none"}">
         <button type="button" class="btn small" data-auth-tab="login">Ingresar</button>
@@ -84,6 +104,10 @@ function buildAuthOverlay(hasRoot){
         <input id="authRegUser" autocomplete="username" required />
         <label>Contraseña</label>
         <input id="authRegPass" type="password" autocomplete="new-password" minlength="4" required />
+        <label>Divisa base</label>
+        <select id="authRegBaseCurrency" required>
+          ${currencyOptions.map(code => `<option value="${code}" ${code === defaults.baseCurrency ? "selected" : ""}>${code}</option>`).join("")}
+        </select>
         <button class="btn" type="submit">Crear y entrar</button>
       </form>
       <div id="authError" class="muted" style="color:var(--danger)"></div>
@@ -116,12 +140,13 @@ export async function ensureAuthenticatedSession(){
 
     const loginForm = overlay.querySelector("#authLoginForm");
     const registerForm = overlay.querySelector("#authRegisterForm");
-    const tabs = overlay.querySelector('.auth-tabs');
-    const chooseBtn = overlay.querySelector('#authChooseFolder');
+    const tabs = overlay.querySelector(".auth-tabs");
+    const chooseBtn = overlay.querySelector("#authChooseFolder");
 
-    const finish = async (userRecord)=>{
+    const finish = async (userRecord, opts = {})=>{
       try{
         const userDir = await rootHandle.getDirectoryHandle(userRecord.folder, { create: true });
+        if(opts.baseCurrency) await createInitialUserConfig(userDir, opts.baseCurrency);
         if(appRoot) appRoot.style.display = "";
         overlay.remove();
         resolve({ mode: "local-folder", dataDirHandle: userDir, user: userRecord.username });
@@ -129,18 +154,18 @@ export async function ensureAuthenticatedSession(){
     };
 
     const enableAuthForms = ()=>{
-      chooseBtn.style.display = 'none';
-      tabs.style.display = 'flex';
-      switchTab(overlay, usersPayload.users.length === 0 ? 'register' : 'login');
+      chooseBtn.style.display = "none";
+      tabs.style.display = "flex";
+      switchTab(overlay, usersPayload.users.length === 0 ? "register" : "login");
     };
 
-    chooseBtn.addEventListener('click', async ()=>{
+    chooseBtn.addEventListener("click", async ()=>{
       try{
         rootHandle = await chooseDataDirectory();
         usersPayload = await loadUsers(rootHandle);
         enableAuthForms();
       }catch(err){
-        setError(err?.message || 'No se pudo seleccionar carpeta');
+        setError(err?.message || "No se pudo seleccionar carpeta");
       }
     });
 
@@ -167,6 +192,7 @@ export async function ensureAuthenticatedSession(){
       setError("");
       const usernameRaw = overlay.querySelector("#authRegUser").value;
       const password = overlay.querySelector("#authRegPass").value;
+      const baseCurrency = String(overlay.querySelector("#authRegBaseCurrency")?.value || defaults.baseCurrency || "ARS").toUpperCase();
       const username = normalizeUsername(usernameRaw);
       if(username.length < 3){ setError("El usuario debe tener al menos 3 caracteres."); return; }
       if(password.length < 4){ setError("La contraseña debe tener al menos 4 caracteres."); return; }
@@ -179,12 +205,13 @@ export async function ensureAuthenticatedSession(){
         salt: toBase64(salt),
         hash: await hashPassword(password, salt),
         folder: `user-${slug(username) || `u-${Date.now()}`}`,
-        createdAt: new Date().toISOString()
+        createdAt: new Date().toISOString(),
+        baseCurrency
       };
 
       usersPayload.users.push(record);
       await saveUsers(rootHandle, usersPayload);
-      await finish(record);
+      await finish(record, { baseCurrency });
     });
 
     if(rootHandle) enableAuthForms();
