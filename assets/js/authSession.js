@@ -56,26 +56,7 @@ async function verifyPassword(password, record){
   return digest === record.hash;
 }
 
-function buildInitialConfig(baseCurrency){
-  const selected = String(baseCurrency || defaults.baseCurrency || "ARS").toUpperCase();
-  const currencies = unique([selected, ...(defaults.currencies || [])]);
-  const ratesToBase = { ...(defaults.ratesToBase || {}) };
-  ratesToBase[selected] = 1;
-
-  return {
-    ...structuredClone(defaults),
-    baseCurrency: selected,
-    currency: selected,
-    currencies,
-    ratesToBase
-  };
-}
-
-async function createInitialUserConfig(userDir, baseCurrency){
-  const existing = await readJsonFile(userDir, "config.json");
-  if(existing) return;
-  await writeJsonFile(userDir, "config.json", buildInitialConfig(baseCurrency));
-}
+const logoSrc = new URL("../../WhatsApp Image 2026-02-03 at 22.23.15.jpeg", import.meta.url).href;
 
 function buildAuthOverlay(hasRoot){
   const currencyOptions = unique(defaults.currencies || [defaults.baseCurrency || "ARS"]);
@@ -83,8 +64,11 @@ function buildAuthOverlay(hasRoot){
   root.className = "auth-overlay";
   root.innerHTML = `
     <div class="auth-card">
+      <div class="auth-hero">
+        <img src="${logoSrc}" alt="Logo de Gastos" class="auth-logo" />
+      </div>
       <h2>Ingreso seguro</h2>
-      <p class="muted">Seleccioná o creá tu usuario. Cada usuario guarda datos en su propia carpeta.</p>
+      <p class="muted">Bienvenido. Ingresá con tu usuario para continuar y mantener tus datos en tu carpeta personal.</p>
       <button id="authChooseFolder" type="button" class="btn" style="display:${hasRoot ? "none" : "block"}">Elegir carpeta de datos</button>
       <div class="auth-tabs" style="display:${hasRoot ? "flex" : "none"}">
         <button type="button" class="btn small" data-auth-tab="login">Ingresar</button>
