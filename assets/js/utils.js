@@ -287,6 +287,26 @@ export function buildEffectiveExpenseEntries(txList = [], config){
   });
 }
 
+export function buildPayBreakdownEntries(txList = [], config){
+  const baseTx = txList.map(tx => ({
+    ...tx,
+    amount: Number(tx?.amount) || 0
+  }));
+  const adjustedExpenses = buildEffectiveExpenseEntries(baseTx, config).map(({ effectiveAmountBase, ...tx }) => ({
+    ...tx,
+    amountBase: effectiveAmountBase
+  }));
+  const adjustedExpenseById = new Map(adjustedExpenses.map(tx => [String(tx.id || ""), tx]));
+
+  return baseTx.map(tx => {
+    if(tx.type === "expense") return adjustedExpenseById.get(String(tx.id || "")) || { ...tx, amountBase: 0 };
+    return {
+      ...tx,
+      amountBase: toBase(tx.amount, tx.currency, config, tx.date, tx.fxRate)
+    };
+  });
+}
+
 export function sortTx(list){
   return list.slice().sort((a,b)=>{
     if(a.date === b.date){
