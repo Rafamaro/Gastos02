@@ -1,4 +1,4 @@
-import { el, fmtMoney, toBase, groupSum, topEntry, escapeHTML, maskedValue, isAnonymized, buildEffectiveExpenseEntries } from "./utils.js";
+import { el, fmtMoney, toBase, groupSum, topEntry, escapeHTML, maskedValue, isAnonymized, buildEffectiveExpenseEntries, buildPayBreakdownEntries } from "./utils.js";
 import { getFiltered } from "./ingreso.js";
 
 const REENTRY_TRANSFER_SOURCES = ["Reingreso por transferencia", "Reintegro", "Venta de divisas"];
@@ -127,7 +127,7 @@ export function refreshDash(state){
   const byCatExpense = groupSum(expenses, x=>expenseKeyFromAgg(x, config, expenseAgg), x=>Number(x.amountBase) || 0);
   const byCatIncome = groupSum(regularIncomes, x=>x.category, x=>toBase(x.amount, x.currency, config, x.date, x.fxRate));
   const byCatReentry = groupSum(reentryTransfers, x=>x.category, x=>toBase(x.amount, x.currency, config, x.date, x.fxRate));
-  const byPay = groupSum(nlist, x=>x.pay, x=>toBase(x.amount, x.currency, config, x.date, x.fxRate));
+  const byPay = groupSum(adjustedList, x=>x.pay, x=>Number(x.amountBase) || 0);
 
   const topExp = topEntry(byCatExpense);
   const topInc = topEntry(byCatIncome);
@@ -216,12 +216,7 @@ function renderCharts(state, list, month, byCatExpense, byCatIncome, byCatReentr
   }
 
   const monthlyWindow = Number(el("dashMonthlyWindow").value || 6);
-  const allAdjustedTx = (() => {
-    const baseTx = state.tx.map(x => ({ ...x, amount: Number(x.amount) || 0 }));
-    const allAdjustedExpenses = buildEffectiveExpenseEntries(baseTx, config).map(({ effectiveAmountBase, ...tx }) => ({ ...tx, amountBase: effectiveAmountBase }));
-    const expenseMap = new Map(allAdjustedExpenses.map(x => [String(x.id || ""), x]));
-    return baseTx.map(tx => tx.type === "expense" ? (expenseMap.get(String(tx.id || "")) || { ...tx, amountBase: 0 }) : tx);
-  })();
+  const allAdjustedTx = buildPayBreakdownEntries(state.tx, config);
   const monthlyMetrics = buildMonthlyComparisonMetrics(allAdjustedTx, config, month, monthlyWindow);
   const monthlyBreakdown = buildMonthlyBreakdownMetrics(allAdjustedTx, config, monthlyMetrics.months, el("dashAgg").value, selectedBreakdownEntities(state));
 
