@@ -104,6 +104,7 @@ export function refreshDash(state){
   const expenses = expenseEntries.map(({ effectiveAmountBase, ...tx })=> ({ ...tx, amountBase: effectiveAmountBase }));
   const adjustedExpenseById = new Map(expenses.map(x => [String(x.id || ""), x]));
   const adjustedList = nlist.map(tx => tx.type === "expense" ? (adjustedExpenseById.get(String(tx.id || "")) || { ...tx, amountBase: 0 }) : tx);
+  const payBreakdownList = buildPayBreakdownEntries(nlist, config);
   const reentryTransfers = incomes.filter(isReentryTransfer);
   const regularIncomes = incomes.filter(isRegularIncome);
 
@@ -127,7 +128,7 @@ export function refreshDash(state){
   const byCatExpense = groupSum(expenses, x=>expenseKeyFromAgg(x, config, expenseAgg), x=>Number(x.amountBase) || 0);
   const byCatIncome = groupSum(regularIncomes, x=>x.category, x=>toBase(x.amount, x.currency, config, x.date, x.fxRate));
   const byCatReentry = groupSum(reentryTransfers, x=>x.category, x=>toBase(x.amount, x.currency, config, x.date, x.fxRate));
-  const byPay = groupSum(adjustedList, x=>x.pay, x=>Number(x.amountBase) || 0);
+  const byPay = groupSum(payBreakdownList, x=>x.pay, x=>Number(x.amountBase) || 0);
 
   const topExp = topEntry(byCatExpense);
   const topInc = topEntry(byCatIncome);
