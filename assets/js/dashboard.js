@@ -128,7 +128,7 @@ export function refreshDash(state){
   const byCatExpense = groupSum(expenses, x=>expenseKeyFromAgg(x, config, expenseAgg), x=>Number(x.amountBase) || 0);
   const byCatIncome = groupSum(regularIncomes, x=>x.category, x=>toBase(x.amount, x.currency, config, x.date, x.fxRate));
   const byCatReentry = groupSum(reentryTransfers, x=>x.category, x=>toBase(x.amount, x.currency, config, x.date, x.fxRate));
-  const byPay = groupSum(payBreakdownList, x=>x.pay, x=>Number(x.amountBase) || 0);
+  const byPay = buildPayMetrics(nlist, config);
 
   const topExp = topEntry(byCatExpense);
   const topInc = topEntry(byCatIncome);
@@ -401,22 +401,48 @@ function renderCharts(state, list, month, byCatExpense, byCatIncome, byCatReentr
 
   const payTop = byPay.slice(0, 10);
   const payLabels = payTop.map(x=>x.key);
-  const payVals = payTop.map(x=>Number(x.value.toFixed(2)));
-  const payPalette = buildPalette(payVals.length, "pay");
+  const payExpenseVals = payTop.map(x=>Number((x.expense || 0).toFixed(2)));
+  const payIncomeVals = payTop.map(x=>Number((x.income || 0).toFixed(2)));
+  const payReentryVals = payTop.map(x=>Number((x.reentry || 0).toFixed(2)));
+  const payPalette = {
+    expense: "hsla(10 78% 56% / .88)",
+    income: "hsla(120 72% 52% / .88)",
+    reentry: "hsla(210 74% 54% / .88)"
+  };
 
   state.charts.pay = new Chart(el("chartPay"), {
     type: "bar",
     data: {
       labels: isAnonymized() ? payLabels.map(()=>"*") : payLabels,
-      datasets: [{
-        label: `Top medios/fuentes (${config.baseCurrency})`,
-        data: payVals,
-        backgroundColor: payPalette,
-        borderColor: payPalette,
-        borderWidth: 1,
-        borderRadius: 10,
-        maxBarThickness: 28
-      }]
+      datasets: [
+        {
+          label: `Gastos (${config.baseCurrency})`,
+          data: payExpenseVals,
+          backgroundColor: payPalette.expense,
+          borderColor: payPalette.expense,
+          borderWidth: 1,
+          borderRadius: 10,
+          maxBarThickness: 18
+        },
+        {
+          label: `Ingresos (${config.baseCurrency})`,
+          data: payIncomeVals,
+          backgroundColor: payPalette.income,
+          borderColor: payPalette.income,
+          borderWidth: 1,
+          borderRadius: 10,
+          maxBarThickness: 18
+        },
+        {
+          label: `Reintegros (${config.baseCurrency})`,
+          data: payReentryVals,
+          backgroundColor: payPalette.reentry,
+          borderColor: payPalette.reentry,
+          borderWidth: 1,
+          borderRadius: 10,
+          maxBarThickness: 18
+        }
+      ]
     },
     options: {
       responsive:true,
@@ -431,6 +457,25 @@ function renderCharts(state, list, month, byCatExpense, byCatIncome, byCatReentr
       }
     }
   });
+}
+
+function buildPayMetrics(txList, config){
+  const buckets = new Map();
+
+  for(const tx of txList){
+    const key = String(tx?.pay || "").trim() || "—";
+    const amountBase = toBase(Number(tx?.amount) || 0, tx?.currency, config, tx?.date, tx?.fxRate);
+    const current = buckets.get(key) || { key, expense: 0, income: 0, reentry: 0, total: 0 };
+
+    if(tx?.type === "expense") current.expense += amountBase;
+    else if(isReentryTransfer(tx)) current.reentry += amountBase;
+    else if(tx?.type === "income") current.income += amountBase;
+
+    current.total += amountBase;
+    buckets.set(key, current);
+  }
+
+  return [...buckets.values()].sort((a,b) => b.total - a.total);
 }
 
 function buildMonthlyComparisonMetrics(txList, config, month, monthsBack){
