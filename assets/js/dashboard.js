@@ -104,6 +104,7 @@ export function refreshDash(state){
   const expenses = expenseEntries.map(({ effectiveAmountBase, ...tx })=> ({ ...tx, amountBase: effectiveAmountBase }));
   const adjustedExpenseById = new Map(expenses.map(x => [String(x.id || ""), x]));
   const adjustedList = nlist.map(tx => tx.type === "expense" ? (adjustedExpenseById.get(String(tx.id || "")) || { ...tx, amountBase: 0 }) : tx);
+  const payBreakdownList = buildPayBreakdownEntries(nlist, config);
   const reentryTransfers = incomes.filter(isReentryTransfer);
   const regularIncomes = incomes.filter(isRegularIncome);
 
