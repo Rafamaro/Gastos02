@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { resolveRate, toBase, safeTags, buildEffectiveExpenseEntries, fmtMoney, parseAmountInput, formatAmountInput } from '../assets/js/utils.js';
+import { resolveRate, toBase, safeTags, buildEffectiveExpenseEntries, buildPayBreakdownEntries, fmtMoney, parseAmountInput, formatAmountInput } from '../assets/js/utils.js';
 
 globalThis.localStorage = {
   getItem(){ return null; },
@@ -71,6 +71,21 @@ test('buildEffectiveExpenseEntries accumulates partial reentries per linked expe
 
   assert.equal(exp1.effectiveAmountBase, 6500);
   assert.equal(exp2.effectiveAmountBase, 4000);
+});
+
+test('buildPayBreakdownEntries keeps registered reentries and discounts linked expenses', () => {
+  const config = { ratesByMonth: {}, ratesToBase: { ARS: 1 } };
+  const tx = [
+    { id: 'exp-1', type: 'expense', pay: 'Tarjeta', amount: 10000, currency: 'ARS', category: 'Comida', date: '2026-02-10' },
+    { id: 'r1', type: 'income', pay: 'Reintegro', amount: 7000, currency: 'ARS', linkedExpenseId: 'exp-1', date: '2026-02-11' }
+  ];
+
+  const entries = buildPayBreakdownEntries(tx, config);
+  const expense = entries.find(x => x.id === 'exp-1');
+  const reentry = entries.find(x => x.id === 'r1');
+
+  assert.equal(expense.amountBase, 3000);
+  assert.equal(reentry.amountBase, 7000);
 });
 
 test('fmtMoney formats fiat currencies with Intl currency style', () => {
